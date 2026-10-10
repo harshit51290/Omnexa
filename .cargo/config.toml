@@ -1,0 +1,3 @@
+[build]
+# scoop gcc's MinGW lib dir (for -lshlwapi et al. when using the gnu toolchain)
+rustflags = ["-L", "C:\\Users\\A3\\scoop\\apps\\gcc\\current\\x86_64-w64-mingw32\\lib"]

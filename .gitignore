@@ -1,0 +1,23 @@
+# Rust build output — never commit binaries or fingerprints
+target/
+Cargo.lock.bak
+
+# Editor / OS noise
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+Thumbs.db
+Desktop.ini
+
+# Local-only test runs (your real saves stay on your machine)
+*.sl2
+*.sl2.bak
+user*.dat
+savevault-test-*.log
+
+# Secrets: API keys live in the app Settings UI, never in files
+.env
+*.pem
+*.key
