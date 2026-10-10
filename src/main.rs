@@ -28,7 +28,8 @@ const CARD: egui::Color32 = egui::Color32::from_rgb(22, 29, 42);
 const CARD_HOVER: egui::Color32 = egui::Color32::from_rgb(28, 36, 52);
 const BORDER: egui::Color32 = egui::Color32::from_rgb(38, 48, 73);
 const TEXT: egui::Color32 = egui::Color32::from_rgb(232, 237, 245);
-const WEAK: egui::Color32 = egui::Color32::from_rgb(142, 153, 173);
+const WEAK: egui::Color32 = egui::Color32::from_rgb(172, 182, 199);
+const WEAK_DIM: egui::Color32 = egui::Color32::from_rgb(142, 153, 173);
 const ACCENT: egui::Color32 = egui::Color32::from_rgb(245, 165, 36);
 const ACCENT_INK: egui::Color32 = egui::Color32::from_rgb(20, 12, 2);
 const GOOD: egui::Color32 = egui::Color32::from_rgb(52, 211, 153);
@@ -89,14 +90,42 @@ struct App {
     backup_root: PathBuf,
     settings: Settings,
     status: String,
+    toasts: Vec<Toast>,
     search: String,
+    filter: Filter,
     show_settings: bool,
     root_edit: String,
     events_rx: mpsc::Receiver<String>,
-    backups: Vec<PathBuf>,
+    backups: Vec<backup::BackupInfo>,
     views: HashMap<String, SaveView>,
     textures: HashMap<String, egui::TextureHandle>,
     running_cache: HashSetCache,
+    busy: Option<String>,
+    restore_pick: Option<PathBuf>,
+    job_rx: mpsc::Receiver<JobMsg>,
+    job_tx: mpsc::Sender<JobMsg>,
+}
+
+#[derive(Clone)]
+struct Toast {
+    text: String,
+    at: Instant,
+    good: bool,
+}
+
+#[derive(Clone, Copy, PartialEq, Default)]
+enum Filter {
+    #[default]
+    All,
+    Protected,
+    NeedsBackup,
+    Running,
+}
+
+struct JobMsg {
+    text: String,
+    good: bool,
+    sel: Option<usize>,
 }
 
 #[derive(Default)]
@@ -111,6 +140,7 @@ impl App {
         let settings = settings::load(&backup_root);
         let backup_root = settings.backup_root.clone();
         let (scan_tx, scan_rx) = mpsc::channel();
+        let (job_tx, job_rx) = mpsc::channel();
         let mut app = Self {
             games: Vec::new(),
             scanning: true,
@@ -120,7 +150,9 @@ impl App {
             backup_root,
             settings,
             status: "Looking for your games…".into(),
+            toasts: Vec::new(),
             search: String::new(),
+            filter: Filter::All,
             show_settings: false,
             root_edit: String::new(),
             events_rx,
@@ -128,6 +160,10 @@ impl App {
             views: HashMap::new(),
             textures: HashMap::new(),
             running_cache: HashSetCache::default(),
+            busy: None,
+            restore_pick: None,
+            job_rx,
+            job_tx,
         };
         app.start_scan();
         app
@@ -158,33 +194,82 @@ impl App {
                 self.sel = self.games.iter().position(|g| !g.saves.is_empty());
             }
             self.refresh_backups();
-            self.say(if n == 0 {
+            let msg = if n == 0 {
                 "No saves found — add a folder in Settings if a game is missing.".to_string()
             } else {
                 format!("Found {n} save files. Pick a game to protect it.")
-            });
+            };
+            self.toast(msg, true);
         }
     }
 
-    fn say(&mut self, s: impl Into<String>) {
-        self.status = s.into();
+    fn toast(&mut self, text: impl Into<String>, good: bool) {
+        let text = text.into();
+        self.status = text.clone();
+        self.toasts.push(Toast {
+            text,
+            at: Instant::now(),
+            good,
+        });
+        self.toasts
+            .retain(|t| t.at.elapsed() < Duration::from_secs(12));
+        if self.toasts.len() > 4 {
+            self.toasts.remove(0);
+        }
+    }
+
+    fn poll_jobs(&mut self) {
+        while let Ok(m) = self.job_rx.try_recv() {
+            self.busy = None;
+            self.toast(m.text, m.good);
+            if let Some(i) = m.sel {
+                if i < self.games.len() {
+                    let mut g = self.games[i].clone();
+                    backup::refresh_saves(&mut g);
+                    self.games[i] = g;
+                }
+                if self.sel == Some(i) {
+                    self.refresh_backups();
+                }
+                self.views.clear();
+            } else {
+                self.refresh_backups();
+            }
+        }
+        self.toasts
+            .retain(|t| t.at.elapsed() < Duration::from_secs(12));
     }
 
     fn refresh_backups(&mut self) {
         self.backups.clear();
         if let Some(i) = self.sel {
             if let Some(g) = self.games.get(i) {
-                self.backups = backup::list_backups_for(&self.backup_root, &backup::dir_name(g));
+                self.backups = backup::list_backup_infos(&self.backup_root, g);
             }
         }
     }
 
+    fn protection(&self, g: &GameEntry) -> bool {
+        // Protected = a real backup exists on disk (current hash dir or
+        // legacy readable dir from pre-SHA-256 builds).
+        for d in [
+            self.backup_root.join(backup::dir_name(g)),
+            self.backup_root.join(backup::legacy_dir_name(g)),
+        ] {
+            if let Ok(rd) = std::fs::read_dir(&d) {
+                for e in rd.flatten().take(30) {
+                    if e.path().is_dir() && e.path().join("manifest.json").exists() {
+                        return true;
+                    }
+                }
+            }
+        }
+        false
+    }
+
     fn last_backup_line(&self) -> String {
         match self.backups.first() {
-            Some(p) => format!(
-                "Last backup {}",
-                p.file_name().and_then(|s| s.to_str()).unwrap_or("recently")
-            ),
+            Some(b) => format!("Last backup {}", b.when),
             None => "Not backed up yet".into(),
         }
     }
@@ -242,67 +327,101 @@ impl App {
                     Ok(dest) => {
                         db::record_backup(&self.backup_root, &key, &dest, "auto", nfiles, nbytes);
                         self.games[i] = g;
-                        self.say(format!(
-                            "Auto backup done for {} — you're safe.",
-                            self.games[i].name
-                        ));
+                        self.toast(
+                            format!("Auto backup done for {} — you're safe.", self.games[i].name),
+                            true,
+                        );
                         if self.sel == Some(i) {
                             self.refresh_backups();
                         }
                     }
-                    Err(e) => self.say(backup::friendly_err(&e)),
+                    Err(e) => self.toast(backup::friendly_err(&e), false),
                 }
             }
         }
     }
 
     fn do_backup(&mut self, i: usize) {
+        if self.busy.is_some() || i >= self.games.len() {
+            return;
+        }
         let mut g = self.games[i].clone();
         backup::refresh_saves(&mut g);
         self.games[i] = g.clone();
-        let key = g.watch_key();
-        let (nfiles, nbytes) = (g.saves.len(), g.total_bytes);
-        match backup::backup_game(&g, &self.backup_root, self.settings.retention) {
-            Ok(dest) => {
-                db::record_backup(&self.backup_root, &key, &dest, "manual", nfiles, nbytes);
-                self.views.clear();
-                self.say(format!("Backed up {} — relax, it's safe.", g.name));
-                self.refresh_backups();
-            }
-            Err(e) => self.say(backup::friendly_err(&e)),
-        }
-    }
-
-    fn do_restore(&mut self, i: usize) {
-        if self.backups.is_empty() {
+        if g.saves.is_empty() {
+            self.toast("Nothing to back up yet.", false);
             return;
         }
-        // Safety first: snapshot whatever is there now.
-        let mut g = self.games[i].clone();
-        backup::refresh_saves(&mut g);
-        if let Ok(snap) = backup::snapshot(&g, &self.backup_root) {
-            db::record_backup(
-                &self.backup_root,
-                &g.watch_key(),
-                &snap,
-                "snapshot",
-                g.saves.len(),
-                g.total_bytes,
-            );
-        }
-        let latest = self.backups[0].clone();
-        match backup::restore_backup(&latest) {
-            Ok((n, _)) => {
-                self.views.clear();
-                backup::refresh_saves(&mut g);
-                self.games[i] = g;
-                self.say(format!(
-                    "Restored {n} files. I kept a copy of what was there, just in case."
-                ));
-                self.refresh_backups();
+        self.busy = Some(format!("Backing up {}…", g.name));
+        let tx = self.job_tx.clone();
+        let root = self.backup_root.clone();
+        let keep = self.settings.retention;
+        let name = g.name.clone();
+        std::thread::spawn(move || {
+            let key = g.watch_key();
+            let (nfiles, nbytes) = (g.saves.len(), g.total_bytes);
+            match backup::backup_game(&g, &root, keep) {
+                Ok(dest) => {
+                    db::record_backup(&root, &key, &dest, "manual", nfiles, nbytes);
+                    let _ = tx.send(JobMsg {
+                        text: format!("Backed up {name} — relax, it's safe."),
+                        good: true,
+                        sel: Some(i),
+                    });
+                }
+                Err(e) => {
+                    let _ = tx.send(JobMsg {
+                        text: backup::friendly_err(&e),
+                        good: false,
+                        sel: None,
+                    });
+                }
             }
-            Err(e) => self.say(backup::friendly_err(&e)),
+        });
+    }
+
+    fn do_restore(&mut self, i: usize, backup_dir: PathBuf) {
+        if self.busy.is_some() || i >= self.games.len() {
+            return;
         }
+        self.restore_pick = None;
+        self.busy = Some("Restoring…".into());
+        let tx = self.job_tx.clone();
+        let root = self.backup_root.clone();
+        let mut g = self.games[i].clone();
+        std::thread::spawn(move || {
+            backup::refresh_saves(&mut g);
+            // Safety first: snapshot whatever is there now.
+            if let Ok(snap) = backup::snapshot(&g, &root) {
+                db::record_backup(
+                    &root,
+                    &g.watch_key(),
+                    &snap,
+                    "snapshot",
+                    g.saves.len(),
+                    g.total_bytes,
+                );
+            }
+            let name = g.name.clone();
+            match backup::restore_backup(&backup_dir) {
+                Ok((n, _)) => {
+                    let _ = tx.send(JobMsg {
+                        text: format!(
+                            "Restored {n} files for {name}. The previous state is kept as a safety copy."
+                        ),
+                        good: true,
+                        sel: Some(i),
+                    });
+                }
+                Err(e) => {
+                    let _ = tx.send(JobMsg {
+                        text: backup::friendly_err(&e),
+                        good: false,
+                        sel: None,
+                    });
+                }
+            }
+        });
     }
 }
 
@@ -777,6 +896,7 @@ impl eframe::App for App {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         self.poll_scan();
         self.poll_events();
+        self.poll_jobs();
         ctx.request_repaint_after(Duration::from_secs(2));
 
         egui::TopBottomPanel::top("top").show(ctx, |ui| {
@@ -811,11 +931,32 @@ impl eframe::App for App {
                 ui.add(
                     egui::TextEdit::singleline(&mut self.search)
                         .hint_text("Find a game…")
-                        .desired_width(280.0),
+                        .desired_width(220.0),
                 );
                 if self.scanning {
                     ui.spinner();
                     ui.label(egui::RichText::new("Scanning…").weak());
+                }
+                if let Some(b) = self.busy.clone() {
+                    ui.spinner();
+                    ui.label(egui::RichText::new(b).color(ACCENT).size(13.0));
+                }
+            });
+            // Filter chips: company-grade triage, not jargon.
+            ui.horizontal(|ui| {
+                for (label, f) in [
+                    ("All", Filter::All),
+                    ("Protected", Filter::Protected),
+                    ("Needs backup", Filter::NeedsBackup),
+                    ("Running", Filter::Running),
+                ] {
+                    let on = self.filter == f;
+                    let b = egui::Button::new(egui::RichText::new(label).size(12.0))
+                        .fill(if on { ACCENT } else { CARD })
+                        .stroke(egui::Stroke::new(1.0_f32, BORDER));
+                    if ui.add(b).clicked() {
+                        self.filter = f;
+                    }
                 }
             });
             ui.add_space(6.0);
@@ -824,40 +965,64 @@ impl eframe::App for App {
         if self.show_settings {
             egui::SidePanel::right("settings")
                 .resizable(false)
-                .default_width(320.0)
+                .default_width(340.0)
                 .show(ctx, |ui| self.show_settings_panel(ui));
         }
 
         egui::SidePanel::left("games")
             .resizable(true)
-            .default_width(300.0)
+            .default_width(320.0)
             .show(ctx, |ui| {
                 ui.add_space(6.0);
+                // Skeleton rows while scanning: perceived performance.
+                if self.scanning && self.games.is_empty() {
+                    for _ in 0..6 {
+                        egui::Frame::group(ui.style())
+                            .inner_margin(egui::Margin::symmetric(10, 10))
+                            .corner_radius(12.0)
+                            .stroke(egui::Stroke::new(1.0_f32, BORDER))
+                            .fill(CARD)
+                            .show(ui, |ui| {
+                                ui.set_width(ui.available_width());
+                                ui.label(egui::RichText::new("  …  ").weak());
+                            });
+                        ui.add_space(4.0);
+                    }
+                    return;
+                }
                 egui::ScrollArea::vertical()
                     .id_salt("game-list")
                     .show(ui, |ui| {
                         let q = self.search.to_ascii_lowercase();
                         let now = games::now_secs();
-                        let items: Vec<(
-                            usize,
-                            String,
-                            String,
-                            bool,
-                            bool,
-                            Option<PathBuf>,
-                            String,
-                        )> = self
+                        let running = self.running_cache.set.clone();
+                        // Precompute protection cheaply per row via dir check.
+                        let items: Vec<(usize, String, String, bool, bool, Option<PathBuf>)> = self
                             .games
                             .iter()
                             .enumerate()
                             .filter(|(_, g)| {
                                 q.is_empty() || g.name.to_ascii_lowercase().contains(&q)
                             })
+                            .filter(|(_, g)| match self.filter {
+                                Filter::All => true,
+                                Filter::Protected => self.protection(g),
+                                Filter::NeedsBackup => !g.saves.is_empty() && !self.protection(g),
+                                Filter::Running => {
+                                    let names = g.exe_names();
+                                    names
+                                        .iter()
+                                        .any(|n| running.contains(&n.to_ascii_lowercase()))
+                                }
+                            })
                             .map(|(i, g)| {
+                                let protected = self.protection(g);
                                 let mut sub = if g.saves.is_empty() {
-                                    "Installed · no saves".to_string()
+                                    "Installed · no saves yet".to_string()
+                                } else if protected {
+                                    format!("Protected · {}", g.progress)
                                 } else {
-                                    g.progress.clone()
+                                    format!("Not backed up · {}", g.progress)
                                 };
                                 if let Some(t) = g.last_played {
                                     sub.push_str(&format!(" · {}", games::fmt_relative(now, t)));
@@ -867,26 +1032,28 @@ impl eframe::App for App {
                                     g.name.clone(),
                                     sub,
                                     self.sel == Some(i),
-                                    !g.saves.is_empty(),
+                                    protected,
                                     logos::find_cached(&self.backup_root, g),
-                                    g.source.to_string(),
                                 )
                             })
                             .collect();
                         if items.is_empty() && !self.scanning {
-                            ui.label(egui::RichText::new("No games match.").weak());
+                            ui.label(
+                                egui::RichText::new("No games match this view.")
+                                    .weak()
+                                    .size(13.0),
+                            );
                         }
                         let mut clicked: Option<usize> = None;
-                        for (i, name, sub, active, has, logo, source) in items {
+                        for (i, name, sub, active, protected, logo) in items {
                             if game_card(
                                 ctx,
                                 &mut self.textures,
                                 ui,
                                 &name,
                                 &sub,
-                                &source,
                                 active,
-                                has,
+                                protected,
                                 logo,
                             ) {
                                 clicked = Some(i);
@@ -903,38 +1070,133 @@ impl eframe::App for App {
             ui.add_space(6.0);
             match self.sel {
                 Some(i) if i < self.games.len() => self.show_game(ctx, ui, i),
-                _ => {
-                    ui.centered_and_justified(|ui| {
-                        ui.label(if self.scanning {
-                            "Looking for your games…"
-                        } else {
-                            "Pick a game on the left to protect it."
-                        });
-                    });
-                }
+                _ => self.show_welcome(ui),
             }
         });
+
+        // Restore confirm modal.
+        if let Some(pick) = self.restore_pick.clone() {
+            let mut close = false;
+            let mut go = false;
+            egui::Window::new("Restore this backup?")
+                .collapsible(false)
+                .resizable(false)
+                .show(ctx, |ui| {
+                    ui.label(egui::RichText::new(
+                        "I'll keep a safety copy of what's there now first. Nothing is lost either way.",
+                    ).size(13.0));
+                    if let Some(b) = self.backups.iter().find(|b| b.path == pick) {
+                        ui.label(egui::RichText::new(format!(
+                            "{} · {} files · {}",
+                            b.when,
+                            b.files,
+                            games::fmt_bytes(b.bytes)
+                        )).color(WEAK).size(13.0));
+                    }
+                    ui.label(egui::RichText::new(
+                        "If Steam Cloud is on, pause it while testing or it may overwrite the restore.",
+                    ).weak().size(12.0));
+                    ui.horizontal(|ui| {
+                        if ui.button("Cancel").clicked() {
+                            close = true;
+                        }
+                        let b = egui::Button::new(
+                            egui::RichText::new("Restore").strong().color(ACCENT_INK),
+                        ).fill(ACCENT);
+                        if ui.add(b).clicked() {
+                            go = true;
+                        }
+                    });
+                });
+            if close {
+                self.restore_pick = None;
+            }
+            if go {
+                if let Some(i) = self.sel {
+                    self.do_restore(i, pick);
+                }
+            }
+        }
 
         egui::TopBottomPanel::bottom("status").show(ctx, |ui| {
             ui.horizontal(|ui| {
                 ui.label(egui::RichText::new("💾").color(WEAK));
-                ui.label(&self.status);
+                if let Some(last) = self.toasts.last() {
+                    ui.label(
+                        egui::RichText::new(&last.text)
+                            .color(if last.good { GOOD } else { WARN })
+                            .size(13.0),
+                    );
+                } else {
+                    ui.label(egui::RichText::new(&self.status).color(WEAK).size(13.0));
+                }
             });
         });
     }
 }
 
-/// One friendly game row: cover thumb (or initial bauble), name, status.
-/// Returns true when clicked.
+impl App {
+    /// First-run welcome: what the app does in 3 steps, no jargon.
+    fn show_welcome(&mut self, ui: &mut egui::Ui) {
+        egui::ScrollArea::vertical().id_salt("welcome").show(ui, |ui| {
+            ui.add_space(20.0);
+            ui.heading(egui::RichText::new("Your saves, safe.").size(28.0).strong().color(TEXT));
+            ui.label(egui::RichText::new(
+                "SaveVault finds your games, shows what's inside their saves, and keeps a copy every time you quit. Everything stays on this PC.",
+            ).size(14.0).color(WEAK));
+            ui.add_space(12.0);
+            for (n, t, d) in [
+                ("1", "Pick a game", "Choose one on the left — your real games float to the top."),
+                ("2", "Back it up", "One click. I verify every file with a fingerprint."),
+                ("3", "Turn on auto-protect", "I'll save a copy every time you quit that game."),
+            ] {
+                egui::Frame::group(ui.style())
+                    .inner_margin(egui::Margin::symmetric(14, 10))
+                    .corner_radius(12.0)
+                    .stroke(egui::Stroke::new(1.0_f32, BORDER))
+                    .fill(CARD)
+                    .show(ui, |ui| {
+                        ui.horizontal(|ui| {
+                            ui.label(egui::RichText::new(n).strong().size(18.0).color(ACCENT));
+                            ui.vertical(|ui| {
+                                ui.label(egui::RichText::new(t).strong().size(15.0).color(TEXT));
+                                ui.label(egui::RichText::new(d).size(13.0).color(WEAK));
+                            });
+                        });
+                    });
+                ui.add_space(6.0);
+            }
+            ui.add_space(8.0);
+            ui.horizontal(|ui| {
+                if ui.button("⟳ Re-scan").clicked() && !self.scanning {
+                    self.start_scan();
+                }
+                if ui.button("⚙ Open Settings").clicked() {
+                    self.show_settings = true;
+                    self.root_edit = self.backup_root.to_string_lossy().to_string();
+                }
+            });
+            if self.scanning {
+                ui.add_space(8.0);
+                ui.horizontal(|ui| {
+                    ui.spinner();
+                    ui.label(egui::RichText::new("Looking for your games…").weak().size(13.0));
+                });
+            }
+        });
+    }
+}
+
+/// One friendly game row: cover thumb (or initial bauble), name, protection status.
+/// Green dot = protected, amber = needs backup, grey = no saves. No jargon.
 fn game_card(
     ctx: &egui::Context,
     textures: &mut HashMap<String, egui::TextureHandle>,
     ui: &mut egui::Ui,
     name: &str,
     sub: &str,
-    source: &str,
     active: bool,
-    has: bool,
+    protected: bool,
     logo: Option<PathBuf>,
 ) -> bool {
     let frame = egui::Frame::group(ui.style())
@@ -960,15 +1222,24 @@ fn game_card(
                 avatar(ui, name, 38.0);
             }
             ui.vertical(|ui| {
-                ui.label(egui::RichText::new(name).strong().size(14.0).color(TEXT));
-                ui.label(egui::RichText::new(sub).color(WEAK).size(12.0));
-                ui.label(egui::RichText::new(source).color(WEAK).size(10.0));
+                ui.label(egui::RichText::new(name).strong().size(15.0).color(TEXT));
+                ui.label(egui::RichText::new(sub).color(WEAK).size(13.0));
+                ui.label(
+                    egui::RichText::new(if protected {
+                        "✓ Protected"
+                    } else {
+                        "○ Not backed up"
+                    })
+                    .color(if protected { GOOD } else { WARN })
+                    .size(12.0)
+                    .strong(),
+                );
             });
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 ui.label(
                     egui::RichText::new("●")
-                        .color(if has { GOOD } else { WEAK })
-                        .size(12.0),
+                        .color(if protected { GOOD } else { WEAK_DIM })
+                        .size(13.0),
                 );
             });
         });
@@ -1043,7 +1314,7 @@ impl App {
         egui::ScrollArea::vertical()
             .id_salt(format!("detail-{i}"))
             .show(ui, |ui| {
-                // Hero banner, then identity
+                // Hero banner, then identity (no jargon: source lives in Details).
                 if let Some(path) = logo.clone() {
                     if let Some(tex) = logo_texture(ctx, &mut self.textures, &path) {
                         ui.add(egui::Image::new(&tex).max_height(120.0));
@@ -1057,12 +1328,7 @@ impl App {
                     ui.vertical(|ui| {
                         ui.heading(egui::RichText::new(&g.name).size(24.0).strong().color(TEXT));
                         ui.horizontal_wrapped(|ui| {
-                            ui.label(
-                                egui::RichText::new(format!("via {}", g.source))
-                                    .color(WEAK)
-                                    .size(12.0),
-                            );
-                            ui.label(egui::RichText::new(format!("· {}", g.progress)).size(13.0));
+                            ui.label(egui::RichText::new(&g.progress).size(14.0).color(TEXT));
                             if let Some(t) = g.last_played {
                                 ui.label(
                                     egui::RichText::new(format!(
@@ -1070,7 +1336,7 @@ impl App {
                                         games::fmt_relative(games::now_secs(), t)
                                     ))
                                     .color(WEAK)
-                                    .size(12.0),
+                                    .size(13.0),
                                 );
                             }
                         });
@@ -1089,55 +1355,56 @@ impl App {
                         .fill(CARD)
                         .show(ui, |ui| {
                             ui.label(egui::RichText::new(
-                                "⚠ This game looks open right now. Quit it first — copying files mid-save can make a broken backup, and Restore is locked until then.",
-                            ).color(WARN));
+                                "This game looks open right now. Quit it first — copying files mid-save can make a broken backup, and Restore stays locked until then.",
+                            ).color(WARN).size(13.0));
                         });
                 }
                 if let Some(w) = twin_warn {
                     ui.add_space(4.0);
-                    ui.label(egui::RichText::new(format!("⚠ {w}")).color(WARN));
+                    ui.label(egui::RichText::new(format!("⚠ {w}")).color(WARN).size(13.0));
                 }
                 ui.add_space(8.0);
 
-                // Hero actions
-                ui.horizontal(|ui| {
-                    let big = egui::vec2(210.0, 52.0);
-                    let can = !g.saves.is_empty();
+                // Hero actions (wrap on narrow windows; busy disables both).
+                let busy = self.busy.is_some();
+                ui.horizontal_wrapped(|ui| {
                     let b = egui::Button::new(
-                        egui::RichText::new("⬇  Back up now").strong().color(ACCENT_INK).size(15.0),
+                        egui::RichText::new(if busy { "Working…" } else { "⬇  Back up now" }).strong().color(ACCENT_INK).size(15.0),
                     )
-                    .min_size(big)
                     .fill(ACCENT);
-                    if ui.add_enabled(can, b).clicked() {
+                    if ui.add_enabled(!g.saves.is_empty() && !busy, b).clicked() {
                         self.do_backup(i);
                     }
-                    let r = egui::Button::new("↩  Restore").min_size(big);
                     let why = if self.backups.is_empty() {
-                        "No backups yet"
+                        "No backups yet — back up first"
                     } else if running {
                         "Quit the game first"
+                    } else if busy {
+                        "Working…"
                     } else {
                         ""
                     };
-                    let resp = ui.add_enabled(!self.backups.is_empty() && !running, r);
+                    let r = egui::Button::new(egui::RichText::new("↩  Restore").size(15.0));
+                    let resp = ui.add_enabled(!self.backups.is_empty() && !running && !busy, r);
                     if resp.clicked() {
-                        self.do_restore(i);
+                        // Restore the newest by default; full list below for older ones.
+                        self.restore_pick = Some(self.backups[0].path.clone());
                     }
                     if !why.is_empty() {
                         resp.on_hover_text(why);
-                        ui.label(egui::RichText::new(why).weak().size(12.0));
+                        ui.label(egui::RichText::new(why).weak().size(13.0));
                     }
                 });
                 ui.label(egui::RichText::new(
-                    "Restore puts the newest backup back and keeps a copy of what was there, just in case. If Steam Cloud is on, pause it while testing or it may overwrite the restore.",
-                ).weak().size(12.0));
+                    "Restore keeps a safety copy of what's there now first. If Steam Cloud is on, pause it while testing or it may overwrite the restore.",
+                ).weak().size(13.0));
                 ui.add_space(6.0);
 
                 // Auto-protect toggle
                 if !g.saves.is_empty() {
                     let mut w = watched;
                     if ui
-                        .checkbox(&mut w, "Auto-backup: save a copy every time I quit this game")
+                        .checkbox(&mut w, "Auto-protect: save a copy every time I quit this game")
                         .changed()
                     {
                         if w {
@@ -1147,16 +1414,56 @@ impl App {
                             if !self.settings.auto_backup {
                                 self.settings.auto_backup = true;
                             }
-                            self.say(format!(
-                                "Auto-backup on for {} — quit the game and I'll handle the rest.",
+                            self.toast(format!(
+                                "Auto-protect on for {} — quit the game and I'll handle the rest.",
                                 g.name
-                            ));
+                            ), true);
                         } else {
                             self.settings.watched.retain(|x| !(x == &key || same_root(x, &key)));
-                            self.say(format!("Auto-backup off for {}.", g.name));
+                            self.toast(format!("Auto-protect off for {}.", g.name), true);
                         }
                         settings::save(&self.settings);
                     }
+                }
+
+                // Backup history: every entry restorable, verified badge, honest sizes.
+                ui.add_space(8.0);
+                ui.label(egui::RichText::new("BACKUP HISTORY").color(WEAK).size(12.0));
+                if self.backups.is_empty() {
+                    ui.label(egui::RichText::new(
+                        "No backups yet. Hit “Back up now” — it takes seconds.",
+                    ).weak().size(13.0));
+                }
+                for b in self.backups.clone() {
+                    egui::Frame::group(ui.style())
+                        .inner_margin(egui::Margin::symmetric(12, 8))
+                        .corner_radius(10.0)
+                        .stroke(egui::Stroke::new(1.0_f32, BORDER))
+                        .fill(CARD)
+                        .show(ui, |ui| {
+                            ui.horizontal(|ui| {
+                                ui.vertical(|ui| {
+                                    ui.label(egui::RichText::new(&b.label).strong().size(14.0).color(TEXT));
+                                    ui.label(egui::RichText::new(format!(
+                                        "{} files · {}{}",
+                                        b.files,
+                                        games::fmt_bytes(b.bytes),
+                                        if b.verified { " · ✓ verified" } else { " · couldn't verify" }
+                                    )).color(if b.verified { GOOD } else { WARN }).size(13.0));
+                                });
+                                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                                    if ui.button("Restore").clicked() && !running && self.busy.is_none() {
+                                        self.restore_pick = Some(b.path.clone());
+                                    }
+                                    if ui.button("Folder").on_hover_text("Open this backup in Explorer").clicked() {
+                                        let _ = std::process::Command::new("explorer")
+                                            .arg(&b.path)
+                                            .spawn();
+                                    }
+                                });
+                            });
+                        });
+                    ui.add_space(4.0);
                 }
 
                 // What's inside the save
@@ -1166,7 +1473,7 @@ impl App {
                             slots.iter().filter(|s| s.used).collect();
                         if !used.is_empty() {
                             ui.add_space(6.0);
-                            ui.label(egui::RichText::new("YOUR JOURNEY").color(WEAK).size(11.0));
+                            ui.label(egui::RichText::new("YOUR JOURNEY").color(WEAK).size(12.0));
                             for s in used {
                                 sekiro_card(ui, s);
                             }
@@ -1177,7 +1484,7 @@ impl App {
                             slots.iter().filter(|s| s.active).collect();
                         if !used.is_empty() {
                             ui.add_space(6.0);
-                            ui.label(egui::RichText::new("YOUR CHARACTERS").color(WEAK).size(11.0));
+                            ui.label(egui::RichText::new("YOUR CHARACTERS").color(WEAK).size(12.0));
                             for s in used {
                                 er_card(ui, s);
                             }
@@ -1185,31 +1492,31 @@ impl App {
                     }
                     SaveView::Hollow(saves) => {
                         ui.add_space(6.0);
-                        ui.label(egui::RichText::new("YOUR KNIGHT").color(WEAK).size(11.0));
+                        ui.label(egui::RichText::new("YOUR KNIGHT").color(WEAK).size(12.0));
                         for (label, s) in &saves {
                             hollow_card(ui, label, s);
                         }
                     }
                     SaveView::Ue(agg) => {
                         ui.add_space(6.0);
-                        ui.label(egui::RichText::new("CHECKPOINTS").color(WEAK).size(11.0));
+                        ui.label(egui::RichText::new("CHECKPOINTS").color(WEAK).size(12.0));
                         ue_card(ui, &agg);
                     }
                     SaveView::Mc(worlds) => {
                         ui.add_space(6.0);
-                        ui.label(egui::RichText::new("YOUR WORLDS").color(WEAK).size(11.0));
+                        ui.label(egui::RichText::new("YOUR WORLDS").color(WEAK).size(12.0));
                         for (label, w) in &worlds {
                             mc_card(ui, label, w);
                         }
                     }
                     SaveView::Shady(s) => {
                         ui.add_space(6.0);
-                        ui.label(egui::RichText::new("YOUR STORY").color(WEAK).size(11.0));
+                        ui.label(egui::RichText::new("YOUR STORY").color(WEAK).size(12.0));
                         shady_card(ui, &s);
                     }
                     SaveView::Json { file, fields, keys } => {
                         ui.add_space(6.0);
-                        ui.label(egui::RichText::new("INSIDE THE SAVE").color(WEAK).size(11.0));
+                        ui.label(egui::RichText::new("INSIDE THE SAVE").color(WEAK).size(12.0));
                         json_card(ui, &file, &fields, keys);
                     }
                     SaveView::Other => {
@@ -1224,27 +1531,21 @@ impl App {
 
                 ui.add_space(6.0);
                 ui.collapsing("Details", |ui| {
-                    ui.label(format!("{} files · {}", g.saves.len(), fmt_bytes(g.total_bytes)));
+                    ui.label(
+                        egui::RichText::new(format!(
+                            "{} files · {} · found via {}",
+                            g.saves.len(),
+                            fmt_bytes(g.total_bytes),
+                            g.source
+                        )).size(13.0),
+                    );
                     for f in g.saves.iter().take(20) {
                         ui.label(
                             egui::RichText::new(
                                 f.path.file_name().and_then(|s| s.to_str()).unwrap_or("?"),
                             )
                             .monospace()
-                            .color(WEAK),
-                        );
-                    }
-                    ui.add_space(4.0);
-                    ui.label(egui::RichText::new("Recent backups").color(WEAK));
-                    if self.backups.is_empty() {
-                        ui.label("None yet.");
-                    }
-                    for b in &self.backups {
-                        ui.label(
-                            egui::RichText::new(
-                                b.file_name().and_then(|s| s.to_str()).unwrap_or("?"),
-                            )
-                            .monospace()
+                            .size(13.0)
                             .color(WEAK),
                         );
                     }
@@ -1253,9 +1554,9 @@ impl App {
                         ui.label(egui::RichText::new(format!(
                             "Tracked since {since} · {} backups",
                             hist.backups
-                        )).color(WEAK));
+                        )).color(WEAK).size(13.0));
                         for (when, what) in hist.history.iter().take(5) {
-                            ui.label(egui::RichText::new(format!("  {when} — {what}")).color(WEAK).size(12.0));
+                            ui.label(egui::RichText::new(format!("  {when} — {what}")).color(WEAK).size(13.0));
                         }
                     }
                 });
@@ -1266,7 +1567,8 @@ impl App {
         egui::ScrollArea::vertical().id_salt("settings-scroll").show(ui, |ui| {
             ui.heading("Settings");
             ui.add_space(6.0);
-            ui.label("Where backups live");
+            ui.label(egui::RichText::new("BACKUPS").color(WEAK).size(12.0));
+            ui.label(egui::RichText::new("Where backups live").strong().size(14.0).color(TEXT));
             ui.horizontal(|ui| {
                 ui.text_edit_singleline(&mut self.root_edit);
                 if ui.button("…").on_hover_text("Browse").clicked() {
@@ -1284,9 +1586,9 @@ impl App {
                         self.settings.backup_root = p;
                         settings::save(&self.settings);
                         self.refresh_backups();
-                        self.say("Backup folder updated.");
+                        self.toast("Backup folder updated.", true);
                     } else {
-                        self.say("That folder path doesn't look right.");
+                        self.toast("That folder path doesn't look right.", false);
                     }
                 }
                 if ui.button("Default").clicked() {
@@ -1303,13 +1605,13 @@ impl App {
             });
             ui.add_space(8.0);
             ui.separator();
-            ui.label("Cover art");
+            ui.label(egui::RichText::new("COVER ART").color(WEAK).size(12.0));
             ui.label(
                 egui::RichText::new(
                     "Steam art is found automatically. For the rest, paste a free SteamGridDB key (steamgriddb.com → your profile → API).",
                 )
                 .weak()
-                .size(12.0),
+                .size(13.0),
             );
             let mut key = self.settings.sgdb_key.clone();
             if ui
@@ -1327,19 +1629,20 @@ impl App {
                 std::thread::spawn(move || {
                     logos::ensure_all(&root, &games, &sgdb_key);
                 });
-                self.say("Fetching art in the background…");
+                self.toast("Fetching art in the background…", true);
             }
             ui.add_space(8.0);
             ui.separator();
+            ui.label(egui::RichText::new("AUTO-PROTECT").color(WEAK).size(12.0));
             let mut ab = self.settings.auto_backup;
             if ui.checkbox(&mut ab, "Auto-backup when I quit a watched game").changed() {
                 self.settings.auto_backup = ab;
                 settings::save(&self.settings);
-                self.say(if ab {
+                self.toast(if ab {
                     "Auto-backup on — tick games to watch them."
                 } else {
                     "Auto-backup paused."
-                });
+                }.to_string(), true);
             }
             ui.label(format!(
                 "Watching {} game{} · keeping last {} backups each · {} stored",
@@ -1360,18 +1663,18 @@ impl App {
             if ui.button("Clear watched games").clicked() {
                 self.settings.watched.clear();
                 settings::save(&self.settings);
-                self.say("Watch list cleared.");
+                self.toast("Watch list cleared.", true);
             }
             ui.add_space(8.0);
             ui.separator();
-            ui.label("Extra game folders");
+            ui.label(egui::RichText::new("GAME FOLDERS").color(WEAK).size(12.0));
             ui.label(egui::RichText::new(
                 "Portable games or launchers I missed? Point me at them.",
-            ).weak().size(12.0));
+            ).weak().size(13.0));
             let mut remove: Option<usize> = None;
             for (k, c) in self.settings.custom_folders.iter().enumerate() {
                 ui.horizontal(|ui| {
-                    ui.label(egui::RichText::new(c.to_string_lossy()).monospace().size(12.0));
+                    ui.label(egui::RichText::new(c.to_string_lossy()).monospace().size(13.0));
                     if ui.button("✕").clicked() {
                         remove = Some(k);
                     }
@@ -1392,14 +1695,14 @@ impl App {
                         if !self.scanning {
                             self.start_scan();
                         }
-                        self.say("Folder added — scanning again.");
+                        self.toast("Folder added — scanning again.", true);
                     }
                 }
             }
             ui.add_space(6.0);
             ui.label(egui::RichText::new(
                 "How it works: leave SaveVault running while you play. When a watched game closes, a copy lands in your backup folder — nothing uploaded anywhere.",
-            ).weak().size(12.0));
+            ).weak().size(13.0));
         });
     }
 }

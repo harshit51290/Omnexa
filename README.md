@@ -41,6 +41,26 @@ saves are merged. FromSoftware saves are recognised by signature
   records (manual/auto/snapshot), progress snapshots per scan. Details
   shows "Tracked since …" plus the recent trail.
 - **Last played** timestamps in the list and the detail view.
+- **Storage layout (SHA-256)**: game folders are
+  `<12-hex-of-install-key>-<readable-name>`, backup folders are
+  `<timestamp>-<8-hex>`, stored files are `<16-hex-of-source-path>_<name>.bin`.
+  Short, deterministic, collision-free — long Windows save paths can never
+  break a backup. Every file carries a SHA-256 in `manifest.json`; restores
+  refuse corrupted copies. Old pre-hash backups are still found and restored.
+
+## Experience
+
+- Welcome screen on first run (3 steps, no jargon), filter chips
+  (All / Protected / Needs backup / Running), skeleton rows while scanning.
+- Game rows show protection state ("✓ Protected" / "○ Not backed up"),
+  never internal source names.
+- Backup history lists every entry with date, size and ✓ verified badge;
+  each row has its own Restore + Folder buttons. Restores ask for
+  confirmation and always keep a pre-restore safety copy.
+- Backups and restores run off the UI thread with a Working… indicator;
+  results arrive as toasts, never a lost status line.
+- Settings are sectioned (Backups / Cover art / Auto-protect / Folders)
+  with live disk-usage readout.
 
 ## What it understands inside saves
 
