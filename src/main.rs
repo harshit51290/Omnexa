@@ -19,27 +19,32 @@ use std::path::PathBuf;
 use std::sync::mpsc;
 use std::time::{Duration, Instant};
 
-// ---------------- "Ember" theme ----------------
-// Warm dark: near-black blue surfaces, one amber accent, calm greens.
+// ---------------- "Vault" gaming theme ----------------
+// Deep-space blues, neon cyan primary, violet secondary, gold highlights.
+// Built to feel like a game library (Steam/GOG), not a settings utility.
 
-const BG: egui::Color32 = egui::Color32::from_rgb(11, 14, 20);
-const PANEL: egui::Color32 = egui::Color32::from_rgb(16, 21, 30);
-const CARD: egui::Color32 = egui::Color32::from_rgb(22, 29, 42);
-const CARD_HOVER: egui::Color32 = egui::Color32::from_rgb(28, 36, 52);
-const BORDER: egui::Color32 = egui::Color32::from_rgb(38, 48, 73);
-const TEXT: egui::Color32 = egui::Color32::from_rgb(232, 237, 245);
+const BG: egui::Color32 = egui::Color32::from_rgb(7, 11, 20);
+const PANEL: egui::Color32 = egui::Color32::from_rgb(12, 18, 32);
+const CARD: egui::Color32 = egui::Color32::from_rgb(19, 27, 48);
+const CARD_HOVER: egui::Color32 = egui::Color32::from_rgb(26, 36, 64);
+const BORDER: egui::Color32 = egui::Color32::from_rgb(42, 58, 95);
+const BORDER_GLOW: egui::Color32 = egui::Color32::from_rgb(34, 211, 238);
+const TEXT: egui::Color32 = egui::Color32::from_rgb(241, 245, 249);
 const WEAK: egui::Color32 = egui::Color32::from_rgb(172, 182, 199);
 const WEAK_DIM: egui::Color32 = egui::Color32::from_rgb(142, 153, 173);
-const ACCENT: egui::Color32 = egui::Color32::from_rgb(245, 165, 36);
-const ACCENT_INK: egui::Color32 = egui::Color32::from_rgb(20, 12, 2);
+const ACCENT: egui::Color32 = egui::Color32::from_rgb(34, 211, 238);
+const ACCENT_INK: egui::Color32 = egui::Color32::from_rgb(4, 20, 26);
+const VIOLET: egui::Color32 = egui::Color32::from_rgb(167, 139, 250);
 const GOOD: egui::Color32 = egui::Color32::from_rgb(52, 211, 153);
+const GOOD_DIM: egui::Color32 = egui::Color32::from_rgb(16, 60, 45);
 const WARN: egui::Color32 = egui::Color32::from_rgb(251, 191, 36);
+const WARN_DIM: egui::Color32 = egui::Color32::from_rgb(66, 45, 7);
 
 const AVATAR_COLORS: [egui::Color32; 8] = [
-    egui::Color32::from_rgb(245, 165, 36),
-    egui::Color32::from_rgb(96, 165, 250),
+    egui::Color32::from_rgb(34, 211, 238),
+    egui::Color32::from_rgb(167, 139, 250),
     egui::Color32::from_rgb(52, 211, 153),
-    egui::Color32::from_rgb(192, 132, 252),
+    egui::Color32::from_rgb(96, 165, 250),
     egui::Color32::from_rgb(248, 113, 113),
     egui::Color32::from_rgb(45, 212, 191),
     egui::Color32::from_rgb(251, 146, 60),
@@ -441,9 +446,9 @@ fn main() -> eframe::Result<()> {
     settings::spawn_watchdog(boot_root, tx);
     let opts = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
-            .with_inner_size([1100.0, 700.0])
-            .with_min_inner_size([880.0, 560.0])
-            .with_title("SaveVault — game save backup"),
+            .with_inner_size([1280.0, 800.0])
+            .with_min_inner_size([1024.0, 620.0])
+            .with_title("SaveVault — game save vault"),
         ..Default::default()
     };
     eframe::run_native(
@@ -458,12 +463,16 @@ fn main() -> eframe::Result<()> {
             style.visuals.extreme_bg_color = BG;
             style.visuals.widgets.inactive.bg_fill = CARD;
             style.visuals.widgets.inactive.fg_stroke = egui::Stroke::new(1.0_f32, TEXT);
+            style.visuals.widgets.inactive.corner_radius = egui::CornerRadius::same(10);
             style.visuals.widgets.hovered.bg_fill = CARD_HOVER;
+            style.visuals.widgets.hovered.corner_radius = egui::CornerRadius::same(10);
             style.visuals.widgets.active.bg_fill = CARD_HOVER;
+            style.visuals.widgets.active.corner_radius = egui::CornerRadius::same(10);
             style.visuals.selection.bg_fill = ACCENT;
             style.visuals.selection.stroke = egui::Stroke::new(1.0_f32, ACCENT_INK);
+            style.visuals.window_corner_radius = egui::CornerRadius::same(14);
             style.spacing.item_spacing = egui::vec2(10.0, 8.0);
-            style.spacing.button_padding = egui::vec2(16.0, 10.0);
+            style.spacing.button_padding = egui::vec2(18.0, 12.0);
             cc.egui_ctx.set_style(style);
             cc.egui_ctx.set_pixels_per_point(1.15);
             Ok(Box::new(App::new(rx)))
@@ -900,15 +909,38 @@ impl eframe::App for App {
         ctx.request_repaint_after(Duration::from_secs(2));
 
         egui::TopBottomPanel::top("top").show(ctx, |ui| {
-            ui.add_space(6.0);
+            ui.add_space(8.0);
             ui.horizontal(|ui| {
-                ui.heading(
-                    egui::RichText::new("SaveVault")
-                        .size(24.0)
-                        .strong()
-                        .color(TEXT),
+                // Brand block: neon mark + wordmark.
+                ui.vertical(|ui| {
+                    ui.horizontal(|ui| {
+                        ui.label(egui::RichText::new("◈").size(24.0).strong().color(ACCENT));
+                        ui.heading(
+                            egui::RichText::new("SAVEVAULT")
+                                .size(22.0)
+                                .strong()
+                                .color(TEXT),
+                        );
+                    });
+                    ui.label(
+                        egui::RichText::new("G A M E   S A V E   V A U L T")
+                            .size(10.5)
+                            .color(VIOLET),
+                    );
+                });
+                ui.add_space(18.0);
+                // Live vault stats — the gaming-dashboard strip.
+                let total = self.games.len();
+                let with_saves = self.games.iter().filter(|g| !g.saves.is_empty()).count();
+                let saves: usize = self.games.iter().map(|g| g.saves.len()).sum();
+                header_stat(ui, &total.to_string(), "games");
+                header_stat(ui, &with_saves.to_string(), "with saves");
+                header_stat(ui, &saves.to_string(), "files");
+                header_stat(
+                    ui,
+                    &fmt_bytes(backup::backup_total(&self.backup_root)),
+                    "vaulted",
                 );
-                ui.label(egui::RichText::new("your progress, safe").weak().size(13.0));
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     if ui
                         .button(if self.show_settings {
@@ -926,34 +958,41 @@ impl eframe::App for App {
                     }
                 });
             });
+            ui.add_space(4.0);
             ui.horizontal(|ui| {
                 ui.label(egui::RichText::new("🔍").color(WEAK));
                 ui.add(
                     egui::TextEdit::singleline(&mut self.search)
-                        .hint_text("Find a game…")
-                        .desired_width(220.0),
+                        .hint_text("Search your library…")
+                        .desired_width(240.0),
                 );
                 if self.scanning {
                     ui.spinner();
-                    ui.label(egui::RichText::new("Scanning…").weak());
+                    ui.label(egui::RichText::new("Scanning library…").weak());
                 }
                 if let Some(b) = self.busy.clone() {
                     ui.spinner();
                     ui.label(egui::RichText::new(b).color(ACCENT).size(13.0));
                 }
             });
-            // Filter chips: company-grade triage, not jargon.
+            // Filter chips: library triage.
             ui.horizontal(|ui| {
                 for (label, f) in [
-                    ("All", Filter::All),
-                    ("Protected", Filter::Protected),
-                    ("Needs backup", Filter::NeedsBackup),
-                    ("Running", Filter::Running),
+                    ("✦ All", Filter::All),
+                    ("🛡 Protected", Filter::Protected),
+                    ("⚠ Needs backup", Filter::NeedsBackup),
+                    ("▶ Running", Filter::Running),
                 ] {
                     let on = self.filter == f;
-                    let b = egui::Button::new(egui::RichText::new(label).size(12.0))
-                        .fill(if on { ACCENT } else { CARD })
-                        .stroke(egui::Stroke::new(1.0_f32, BORDER));
+                    let b = egui::Button::new(
+                        egui::RichText::new(label).size(12.5).strong().color(if on {
+                            ACCENT_INK
+                        } else {
+                            TEXT
+                        }),
+                    )
+                    .fill(if on { ACCENT } else { CARD })
+                    .stroke(egui::Stroke::new(1.0_f32, if on { ACCENT } else { BORDER }));
                     if ui.add(b).clicked() {
                         self.filter = f;
                     }
@@ -971,7 +1010,7 @@ impl eframe::App for App {
 
         egui::SidePanel::left("games")
             .resizable(true)
-            .default_width(320.0)
+            .default_width(348.0)
             .show(ctx, |ui| {
                 ui.add_space(6.0);
                 // Skeleton rows while scanning: perceived performance.
@@ -997,7 +1036,7 @@ impl eframe::App for App {
                         let now = games::now_secs();
                         let running = self.running_cache.set.clone();
                         // Precompute protection cheaply per row via dir check.
-                        let items: Vec<(usize, String, String, bool, bool, Option<PathBuf>)> = self
+                        let items: Vec<(usize, String, String, bool, bool, bool, Option<PathBuf>)> = self
                             .games
                             .iter()
                             .enumerate()
@@ -1017,6 +1056,9 @@ impl eframe::App for App {
                             })
                             .map(|(i, g)| {
                                 let protected = self.protection(g);
+                                let names = g.exe_names();
+                                let is_running = names.iter().any(|n| running.contains(&n.to_ascii_lowercase()))
+                                    && names.iter().any(|n| !n.is_empty());
                                 let mut sub = if g.saves.is_empty() {
                                     "Installed · no saves yet".to_string()
                                 } else if protected {
@@ -1033,6 +1075,7 @@ impl eframe::App for App {
                                     sub,
                                     self.sel == Some(i),
                                     protected,
+                                    is_running,
                                     logos::find_cached(&self.backup_root, g),
                                 )
                             })
@@ -1045,7 +1088,7 @@ impl eframe::App for App {
                             );
                         }
                         let mut clicked: Option<usize> = None;
-                        for (i, name, sub, active, protected, logo) in items {
+                        for (i, name, sub, active, protected, is_running, logo) in items {
                             if game_card(
                                 ctx,
                                 &mut self.textures,
@@ -1054,6 +1097,7 @@ impl eframe::App for App {
                                 &sub,
                                 active,
                                 protected,
+                                is_running,
                                 logo,
                             ) {
                                 clicked = Some(i);
@@ -1136,37 +1180,56 @@ impl eframe::App for App {
 }
 
 impl App {
-    /// First-run welcome: what the app does in 3 steps, no jargon.
+    /// First-run welcome: the vault pitch, gaming style.
     fn show_welcome(&mut self, ui: &mut egui::Ui) {
         egui::ScrollArea::vertical().id_salt("welcome").show(ui, |ui| {
-            ui.add_space(20.0);
-            ui.heading(egui::RichText::new("Your saves, safe.").size(28.0).strong().color(TEXT));
-            ui.label(egui::RichText::new(
-                "SaveVault finds your games, shows what's inside their saves, and keeps a copy every time you quit. Everything stays on this PC.",
-            ).size(14.0).color(WEAK));
-            ui.add_space(12.0);
-            for (n, t, d) in [
-                ("1", "Pick a game", "Choose one on the left — your real games float to the top."),
-                ("2", "Back it up", "One click. I verify every file with a fingerprint."),
-                ("3", "Turn on auto-protect", "I'll save a copy every time you quit that game."),
-            ] {
-                egui::Frame::group(ui.style())
-                    .inner_margin(egui::Margin::symmetric(14, 10))
-                    .corner_radius(12.0)
-                    .stroke(egui::Stroke::new(1.0_f32, BORDER))
-                    .fill(CARD)
-                    .show(ui, |ui| {
-                        ui.horizontal(|ui| {
-                            ui.label(egui::RichText::new(n).strong().size(18.0).color(ACCENT));
-                            ui.vertical(|ui| {
-                                ui.label(egui::RichText::new(t).strong().size(15.0).color(TEXT));
-                                ui.label(egui::RichText::new(d).size(13.0).color(WEAK));
-                            });
+            ui.add_space(28.0);
+            ui.vertical_centered(|ui| {
+                ui.label(
+                    egui::RichText::new("◈ SAVEVAULT")
+                        .size(15.0)
+                        .strong()
+                        .color(ACCENT),
+                );
+                ui.heading(
+                    egui::RichText::new("Your library, bulletproof.")
+                        .size(34.0)
+                        .strong()
+                        .color(TEXT),
+                );
+                ui.label(
+                    egui::RichText::new(
+                        "Every save, every character, every world — found automatically, backed up in one click, restored without fear. Everything stays on this PC.",
+                    )
+                    .size(14.5)
+                    .color(WEAK),
+                );
+            });
+            ui.add_space(16.0);
+            ui.horizontal_wrapped(|ui| {
+                for (n, t, d) in [
+                    ("01", "PICK A GAME", "Your real library floats to the top, cover art included."),
+                    ("02", "BACK IT UP", "One click. Every file fingerprinted and verified."),
+                    ("03", "AUTO-PROTECT", "Quit the game — a copy lands in your vault by itself."),
+                ] {
+                    egui::Frame::group(ui.style())
+                        .inner_margin(egui::Margin::symmetric(16, 12))
+                        .corner_radius(14.0)
+                        .stroke(egui::Stroke::new(1.0_f32, BORDER))
+                        .fill(CARD)
+                        .show(ui, |ui| {
+                            ui.set_width(210.0);
+                            ui.label(
+                                egui::RichText::new(n).strong().size(20.0).color(VIOLET),
+                            );
+                            ui.label(
+                                egui::RichText::new(t).strong().size(14.0).color(TEXT),
+                            );
+                            ui.label(egui::RichText::new(d).size(12.5).color(WEAK));
                         });
-                    });
-                ui.add_space(6.0);
-            }
-            ui.add_space(8.0);
+                }
+            });
+            ui.add_space(12.0);
             ui.horizontal(|ui| {
                 if ui.button("⟳ Re-scan").clicked() && !self.scanning {
                     self.start_scan();
@@ -1186,9 +1249,42 @@ impl App {
         });
     }
 }
+/// Small dashboard number in the header strip.
+fn header_stat(ui: &mut egui::Ui, value: &str, label: &str) {
+    egui::Frame::new()
+        .inner_margin(egui::Margin::symmetric(12, 6))
+        .corner_radius(10.0)
+        .stroke(egui::Stroke::new(1.0_f32, BORDER))
+        .fill(CARD)
+        .show(ui, |ui| {
+            ui.vertical(|ui| {
+                ui.label(
+                    egui::RichText::new(value)
+                        .size(16.0)
+                        .strong()
+                        .color(TEXT),
+                );
+                ui.label(egui::RichText::new(label).size(10.5).color(WEAK));
+            });
+        });
+}
 
-/// One friendly game row: cover thumb (or initial bauble), name, protection status.
-/// Green dot = protected, amber = needs backup, grey = no saves. No jargon.
+/// Stat chip for the game hero: dim label over a bright value.
+fn detail_chip(ui: &mut egui::Ui, label: &str, value: &str) {
+    egui::Frame::new()
+        .inner_margin(egui::Margin::symmetric(12, 7))
+        .corner_radius(10.0)
+        .stroke(egui::Stroke::new(1.0_f32, BORDER))
+        .fill(CARD)
+        .show(ui, |ui| {
+            ui.vertical(|ui| {
+                ui.label(egui::RichText::new(label).size(10.0).color(WEAK_DIM));
+                ui.label(egui::RichText::new(value).size(14.0).strong().color(TEXT));
+            });
+        });
+}
+
+/// One friendly game row: cover-first library card, Steam-style.
 fn game_card(
     ctx: &egui::Context,
     textures: &mut HashMap<String, egui::TextureHandle>,
@@ -1197,13 +1293,14 @@ fn game_card(
     sub: &str,
     active: bool,
     protected: bool,
+    running: bool,
     logo: Option<PathBuf>,
 ) -> bool {
     let frame = egui::Frame::group(ui.style())
-        .inner_margin(egui::Margin::symmetric(10, 8))
-        .corner_radius(12.0)
+        .inner_margin(egui::Margin::same(0))
+        .corner_radius(14.0)
         .stroke(if active {
-            egui::Stroke::new(1.5_f32, ACCENT)
+            egui::Stroke::new(2.0_f32, BORDER_GLOW)
         } else {
             egui::Stroke::new(1.0_f32, BORDER)
         })
@@ -1211,46 +1308,81 @@ fn game_card(
     let mut clicked = false;
     frame.show(ui, |ui| {
         ui.set_width(ui.available_width());
-        let r = ui.horizontal(|ui| {
-            if let Some(tex) = logo.as_ref().and_then(|p| logo_texture(ctx, textures, p)) {
-                ui.add(
-                    egui::Image::new(&tex)
-                        .fit_to_exact_size(egui::vec2(64.0, 38.0))
-                        .corner_radius(6.0),
-                );
-            } else {
-                avatar(ui, name, 38.0);
-            }
-            ui.vertical(|ui| {
-                ui.label(egui::RichText::new(name).strong().size(15.0).color(TEXT));
-                ui.label(egui::RichText::new(sub).color(WEAK).size(13.0));
-                ui.label(
-                    egui::RichText::new(if protected {
-                        "✓ Protected"
-                    } else {
-                        "○ Not backed up"
-                    })
-                    .color(if protected { GOOD } else { WARN })
-                    .size(12.0)
-                    .strong(),
-                );
-            });
-            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                ui.label(
-                    egui::RichText::new("●")
-                        .color(if protected { GOOD } else { WEAK_DIM })
-                        .size(13.0),
-                );
-            });
-        });
-        if r.response.interact(egui::Sense::click()).clicked() {
-            clicked = true;
+        if let Some(tex) = logo.as_ref().and_then(|p| logo_texture(ctx, textures, p)) {
+            ui.add(
+                egui::Image::new(&tex)
+                    .fit_to_exact_size(egui::vec2(ui.available_width(), 96.0))
+                    .corner_radius(10.0),
+            );
+        } else {
+            let (rect, _) =
+                ui.allocate_exact_size(egui::vec2(ui.available_width(), 64.0), egui::Sense::hover());
+            let p = ui.painter();
+            p.rect_filled(rect, 10.0, avatar_color(name));
+            p.text(
+                rect.center(),
+                egui::Align2::CENTER_CENTER,
+                name.chars()
+                    .find(|c| c.is_alphanumeric())
+                    .unwrap_or('?')
+                    .to_string()
+                    .to_uppercase(),
+                egui::FontId::proportional(28.0),
+                egui::Color32::from_rgba_unmultiplied(10, 14, 24, 220),
+            );
         }
+        egui::Frame::new()
+            .inner_margin(egui::Margin::symmetric(12, 10))
+            .show(ui, |ui| {
+                ui.set_width(ui.available_width());
+                let r = ui.vertical(|ui| {
+                    ui.label(
+                        egui::RichText::new(name)
+                            .strong()
+                            .size(15.5)
+                            .color(TEXT),
+                    );
+                    ui.label(egui::RichText::new(sub).color(WEAK).size(12.5));
+                    ui.add_space(4.0);
+                    ui.horizontal_wrapped(|ui| {
+                        let (txt, fg, bg) = if protected {
+                            ("PROTECTED", GOOD, GOOD_DIM)
+                        } else {
+                            ("NOT BACKED UP", WARN, WARN_DIM)
+                        };
+                        egui::Frame::new()
+                            .inner_margin(egui::Margin::symmetric(8, 3))
+                            .corner_radius(20.0)
+                            .fill(bg)
+                            .show(ui, |ui| {
+                                ui.label(
+                                    egui::RichText::new(txt).size(10.5).strong().color(fg),
+                                );
+                            });
+                        if running {
+                            egui::Frame::new()
+                                .inner_margin(egui::Margin::symmetric(8, 3))
+                                .corner_radius(20.0)
+                                .fill(GOOD_DIM)
+                                .show(ui, |ui| {
+                                    ui.label(
+                                        egui::RichText::new("RUNNING")
+                                            .size(10.5)
+                                            .strong()
+                                            .color(GOOD),
+                                    );
+                                });
+                        }
+                    });
+                });
+                if r.response.interact(egui::Sense::click()).clicked() {
+                    clicked = true;
+                }
+            });
     });
-    ui.add_space(4.0);
+    ui.add_space(8.0);
     clicked
 }
-
 /// GPU texture for a cached logo file, loaded once.
 fn logo_texture(
     ctx: &egui::Context,
@@ -1314,38 +1446,76 @@ impl App {
         egui::ScrollArea::vertical()
             .id_salt(format!("detail-{i}"))
             .show(ui, |ui| {
-                // Hero banner, then identity (no jargon: source lives in Details).
+                // Cinematic hero: full-width banner, big title, stat chips.
                 if let Some(path) = logo.clone() {
                     if let Some(tex) = logo_texture(ctx, &mut self.textures, &path) {
-                        ui.add(egui::Image::new(&tex).max_height(120.0));
-                        ui.add_space(4.0);
+                        egui::Frame::new()
+                            .corner_radius(16.0)
+                            .stroke(egui::Stroke::new(1.0_f32, BORDER))
+                            .show(ui, |ui| {
+                                ui.set_width(ui.available_width());
+                                ui.add(
+                                    egui::Image::new(&tex)
+                                        .fit_to_exact_size(egui::vec2(
+                                            ui.available_width(),
+                                            210.0,
+                                        ))
+                                        .corner_radius(14.0),
+                                );
+                            });
+                        ui.add_space(8.0);
                     }
                 }
                 ui.horizontal(|ui| {
                     if logo.is_none() {
-                        avatar(ui, &g.name, 52.0);
+                        avatar(ui, &g.name, 56.0);
                     }
                     ui.vertical(|ui| {
-                        ui.heading(egui::RichText::new(&g.name).size(24.0).strong().color(TEXT));
-                        ui.horizontal_wrapped(|ui| {
-                            ui.label(egui::RichText::new(&g.progress).size(14.0).color(TEXT));
-                            if let Some(t) = g.last_played {
-                                ui.label(
-                                    egui::RichText::new(format!(
-                                        "· last played {}",
-                                        games::fmt_relative(games::now_secs(), t)
-                                    ))
-                                    .color(WEAK)
-                                    .size(13.0),
-                                );
-                            }
-                        });
+                        if running {
+                            ui.label(
+                                egui::RichText::new("● RUNNING NOW")
+                                    .size(11.5)
+                                    .strong()
+                                    .color(GOOD),
+                            );
+                        }
+                        ui.heading(
+                            egui::RichText::new(&g.name)
+                                .size(30.0)
+                                .strong()
+                                .color(TEXT),
+                        );
+                        ui.label(
+                            egui::RichText::new(&g.progress)
+                                .size(15.0)
+                                .color(VIOLET),
+                        );
                     });
                 });
-                ui.add_space(4.0);
+                ui.add_space(6.0);
+                // Stat chips: last played · files · size · protection.
                 ui.horizontal_wrapped(|ui| {
-                    ui.label(backup_badge(!self.backups.is_empty(), &self.last_backup_line()));
+                    if let Some(t) = g.last_played {
+                        detail_chip(
+                            ui,
+                            "LAST PLAYED",
+                            &games::fmt_relative(games::now_secs(), t),
+                        );
+                    }
+                    detail_chip(ui, "SAVE FILES", &format!("{}", g.saves.len()));
+                    detail_chip(ui, "SAVE SIZE", &fmt_bytes(g.total_bytes));
+                    detail_chip(
+                        ui,
+                        "STATUS",
+                        if self.backups.is_empty() {
+                            "Needs backup"
+                        } else {
+                            "Protected"
+                        },
+                    );
                 });
+                ui.add_space(2.0);
+                ui.label(backup_badge(!self.backups.is_empty(), &self.last_backup_line()));
                 if running {
                     ui.add_space(4.0);
                     egui::Frame::group(ui.style())
@@ -1365,13 +1535,18 @@ impl App {
                 }
                 ui.add_space(8.0);
 
-                // Hero actions (wrap on narrow windows; busy disables both).
+                // Hero actions: big neon primary + outlined restore.
                 let busy = self.busy.is_some();
                 ui.horizontal_wrapped(|ui| {
                     let b = egui::Button::new(
-                        egui::RichText::new(if busy { "Working…" } else { "⬇  Back up now" }).strong().color(ACCENT_INK).size(15.0),
+                        egui::RichText::new(if busy { "WORKING…" } else { "▶  BACK UP NOW" })
+                            .strong()
+                            .color(ACCENT_INK)
+                            .size(16.0),
                     )
-                    .fill(ACCENT);
+                    .fill(ACCENT)
+                    .corner_radius(12.0)
+                    .min_size(egui::vec2(220.0, 52.0));
                     if ui.add_enabled(!g.saves.is_empty() && !busy, b).clicked() {
                         self.do_backup(i);
                     }
@@ -1384,7 +1559,12 @@ impl App {
                     } else {
                         ""
                     };
-                    let r = egui::Button::new(egui::RichText::new("↩  Restore").size(15.0));
+                    let r = egui::Button::new(
+                        egui::RichText::new("RESTORE").size(15.0).strong().color(TEXT),
+                    )
+                    .stroke(egui::Stroke::new(1.5_f32, VIOLET))
+                    .corner_radius(12.0)
+                    .min_size(egui::vec2(170.0, 52.0));
                     let resp = ui.add_enabled(!self.backups.is_empty() && !running && !busy, r);
                     if resp.clicked() {
                         // Restore the newest by default; full list below for older ones.
@@ -1428,7 +1608,19 @@ impl App {
 
                 // Backup history: every entry restorable, verified badge, honest sizes.
                 ui.add_space(8.0);
-                ui.label(egui::RichText::new("BACKUP HISTORY").color(WEAK).size(12.0));
+                ui.horizontal(|ui| {
+                    ui.label(
+                        egui::RichText::new("BACKUP TIMELINE")
+                            .color(VIOLET)
+                            .size(12.5)
+                            .strong(),
+                    );
+                    ui.label(
+                        egui::RichText::new(format!("{} total", self.backups.len()))
+                            .color(WEAK)
+                            .size(12.0),
+                    );
+                });
                 if self.backups.is_empty() {
                     ui.label(egui::RichText::new(
                         "No backups yet. Hit “Back up now” — it takes seconds.",
@@ -1473,7 +1665,7 @@ impl App {
                             slots.iter().filter(|s| s.used).collect();
                         if !used.is_empty() {
                             ui.add_space(6.0);
-                            ui.label(egui::RichText::new("YOUR JOURNEY").color(WEAK).size(12.0));
+                            ui.label(egui::RichText::new("◆ YOUR JOURNEY").color(VIOLET).size(12.5).strong());
                             for s in used {
                                 sekiro_card(ui, s);
                             }
@@ -1484,7 +1676,7 @@ impl App {
                             slots.iter().filter(|s| s.active).collect();
                         if !used.is_empty() {
                             ui.add_space(6.0);
-                            ui.label(egui::RichText::new("YOUR CHARACTERS").color(WEAK).size(12.0));
+                            ui.label(egui::RichText::new("◆ YOUR CHARACTERS").color(VIOLET).size(12.5).strong());
                             for s in used {
                                 er_card(ui, s);
                             }
@@ -1492,31 +1684,31 @@ impl App {
                     }
                     SaveView::Hollow(saves) => {
                         ui.add_space(6.0);
-                        ui.label(egui::RichText::new("YOUR KNIGHT").color(WEAK).size(12.0));
+                        ui.label(egui::RichText::new("◆ YOUR KNIGHT").color(VIOLET).size(12.5).strong());
                         for (label, s) in &saves {
                             hollow_card(ui, label, s);
                         }
                     }
                     SaveView::Ue(agg) => {
                         ui.add_space(6.0);
-                        ui.label(egui::RichText::new("CHECKPOINTS").color(WEAK).size(12.0));
+                        ui.label(egui::RichText::new("◆ CHECKPOINTS").color(VIOLET).size(12.5).strong());
                         ue_card(ui, &agg);
                     }
                     SaveView::Mc(worlds) => {
                         ui.add_space(6.0);
-                        ui.label(egui::RichText::new("YOUR WORLDS").color(WEAK).size(12.0));
+                        ui.label(egui::RichText::new("◆ YOUR WORLDS").color(VIOLET).size(12.5).strong());
                         for (label, w) in &worlds {
                             mc_card(ui, label, w);
                         }
                     }
                     SaveView::Shady(s) => {
                         ui.add_space(6.0);
-                        ui.label(egui::RichText::new("YOUR STORY").color(WEAK).size(12.0));
+                        ui.label(egui::RichText::new("◆ YOUR STORY").color(VIOLET).size(12.5).strong());
                         shady_card(ui, &s);
                     }
                     SaveView::Json { file, fields, keys } => {
                         ui.add_space(6.0);
-                        ui.label(egui::RichText::new("INSIDE THE SAVE").color(WEAK).size(12.0));
+                        ui.label(egui::RichText::new("◆ INSIDE THE SAVE").color(VIOLET).size(12.5).strong());
                         json_card(ui, &file, &fields, keys);
                     }
                     SaveView::Other => {
@@ -1567,7 +1759,7 @@ impl App {
         egui::ScrollArea::vertical().id_salt("settings-scroll").show(ui, |ui| {
             ui.heading("Settings");
             ui.add_space(6.0);
-            ui.label(egui::RichText::new("BACKUPS").color(WEAK).size(12.0));
+            ui.label(egui::RichText::new("BACKUPS").color(VIOLET).size(12.5).strong());
             ui.label(egui::RichText::new("Where backups live").strong().size(14.0).color(TEXT));
             ui.horizontal(|ui| {
                 ui.text_edit_singleline(&mut self.root_edit);
@@ -1605,7 +1797,7 @@ impl App {
             });
             ui.add_space(8.0);
             ui.separator();
-            ui.label(egui::RichText::new("COVER ART").color(WEAK).size(12.0));
+            ui.label(egui::RichText::new("COVER ART").color(VIOLET).size(12.5).strong());
             ui.label(
                 egui::RichText::new(
                     "Steam art is found automatically. For the rest, paste a free SteamGridDB key (steamgriddb.com → your profile → API).",
@@ -1633,7 +1825,7 @@ impl App {
             }
             ui.add_space(8.0);
             ui.separator();
-            ui.label(egui::RichText::new("AUTO-PROTECT").color(WEAK).size(12.0));
+            ui.label(egui::RichText::new("AUTO-PROTECT").color(VIOLET).size(12.5).strong());
             let mut ab = self.settings.auto_backup;
             if ui.checkbox(&mut ab, "Auto-backup when I quit a watched game").changed() {
                 self.settings.auto_backup = ab;
@@ -1667,7 +1859,7 @@ impl App {
             }
             ui.add_space(8.0);
             ui.separator();
-            ui.label(egui::RichText::new("GAME FOLDERS").color(WEAK).size(12.0));
+            ui.label(egui::RichText::new("GAME FOLDERS").color(VIOLET).size(12.5).strong());
             ui.label(egui::RichText::new(
                 "Portable games or launchers I missed? Point me at them.",
             ).weak().size(13.0));
@@ -2088,10 +2280,14 @@ fn json_card(ui: &mut egui::Ui, file: &str, fields: &[(String, String)], keys: u
 
 fn backup_badge(has: bool, line: &str) -> egui::RichText {
     if has {
-        egui::RichText::new(format!("✓ Protected · {line}"))
+        egui::RichText::new(format!("🛡 {} ", line))
             .color(GOOD)
             .strong()
+            .size(14.0)
     } else {
-        egui::RichText::new(format!("○ {line}")).color(WARN)
+        egui::RichText::new(format!("○ {} — back it up", line))
+            .color(WARN)
+            .strong()
+            .size(14.0)
     }
 }
