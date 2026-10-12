@@ -1,10 +1,13 @@
-# SaveVault — game save backup (Windows, Rust)
+![Banner](assets/banner.png)
 
-![CI](https://github.com/harshit51290/savevault/actions/workflows/ci.yml/badge.svg)
+# <img src="assets/logo.png" width="48" align="left"> Omnexa — Universal Data Saver (Windows, Rust)
+
+![CI](https://github.com/harshit51290/Omnexa/actions/workflows/ci.yml/badge.svg)
 ![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)
 
-Universal save manager in the "Ember" theme: near-black blue surfaces, one
-amber action color, cover art, plain words everywhere — no hex, no hashes.
+One system. Smarter data. Omnexa finds your games, shows what's inside
+their saves in plain words, and keeps verified backups — neon gaming
+library UI, no hex, no hashes, nothing uploaded anywhere.
 
 ## Run
 
@@ -19,7 +22,7 @@ cargo +stable-x86_64-pc-windows-gnu run -- --selftest  # full pipeline: discover
 cargo +stable-x86_64-pc-windows-gnu run -- --details <save file>
 ```
 
-Binary: `target\debug\savevault.exe` — double-click opens the window.
+Binary: `target\debug\omnexa.exe` — double-click opens the window.
 
 ## How it finds games (no hardcoded list)
 
@@ -36,8 +39,8 @@ saves are merged. FromSoftware saves are recognised by signature
 
 - **Art, automatic**: Steam library headers → SteamGridDB grids (paste a
   free key from steamgriddb.com in Settings) → each game's own exe icon.
-  Cached in `SaveVault\cache\logos\`; letter avatars where nothing found.
-- **SQLite history** (`SaveVault\savevault.db`): first-seen dates, backup
+  Cached in `Omnexa\cache\logos\`; letter avatars where nothing found. Early builds used `Documents\SaveVault` — if that folder exists, it keeps being used so no backup is ever orphaned.
+- **SQLite history** (`Omnexa\omnexa.db`, auto-migrated from `savevault.db`): first-seen dates, backup
   records (manual/auto/snapshot), progress snapshots per scan. Details
   shows "Tracked since …" plus the recent trail.
 - **Last played** timestamps in the list and the detail view.
@@ -84,7 +87,7 @@ saves are merged. FromSoftware saves are recognised by signature
   still works normally.
 - Anything else: honest file counts, backed up verbatim.
 
-`savevault.exe --details <file>` prints everything readable in one save —
+`omnexa.exe --details <file>` prints everything readable in one save —
 handy for checking a backup before you trust it.
 
 ## Edge cases handled

@@ -15,4 +15,4 @@ jobs:
       - name: Build
         run: cargo build --locked
       - name: Smoke test (headless scan)
-        run: .\target\debug\savevault.exe --scan
+        run: .\target\debug\omnexa.exe --scan

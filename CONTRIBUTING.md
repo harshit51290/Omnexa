@@ -1,4 +1,4 @@
-# Contributing to SaveVault
+# Contributing to Omnexa
 
 Thanks for helping out. Small, honest PRs beat big clever ones here.
 
@@ -11,7 +11,7 @@ Thanks for helping out. Small, honest PRs beat big clever ones here.
    unknown data loses fields, never panics. A wrong number is worse than
    a missing one — drop the field and say so.
 3. **Verify against real saves.** New offsets need a before/after pair or
-   a second independent source. `savevault.exe --details <file>` is the
+   a second independent source. `omnexa.exe --details <file>` is the
    harness — paste its output in the PR.
 4. **No game-specific hardcoding for discovery.** New games must be found
    by the universal detector (install sources, save matching, signatures).

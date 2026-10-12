@@ -20,11 +20,11 @@ jobs:
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force dist | Out-Null
-          Copy-Item target\release\savevault.exe dist\
+          Copy-Item target\release\omnexa.exe dist\
           Copy-Item README.md, LICENSE dist\
-          Compress-Archive -Path dist\* -DestinationPath savevault-windows-x64.zip -Force
+          Compress-Archive -Path dist\* -DestinationPath omnexa-windows-x64.zip -Force
       - name: Publish release
         uses: softprops/action-gh-release@v2
         with:
-          files: savevault-windows-x64.zip
+          files: omnexa-windows-x64.zip
           generate_release_notes: true

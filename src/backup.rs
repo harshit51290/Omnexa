@@ -12,9 +12,16 @@ use sha2::{Digest, Sha256};
 use std::path::{Path, PathBuf};
 
 pub fn default_backup_root() -> PathBuf {
-    dirs::document_dir()
-        .unwrap_or_else(|| PathBuf::from(r"C:\Users\A3\Documents"))
-        .join("SaveVault")
+    let docs = dirs::document_dir().unwrap_or_else(|| PathBuf::from(r"C:\Users\A3\Documents"));
+    let next = docs.join("Omnexa");
+    // Migrate gracefully: early builds used Documents\SaveVault. If it
+    // exists and the new folder doesn't, keep using it — never orphan
+    // a user's existing backups on upgrade.
+    let legacy = docs.join("SaveVault");
+    if !next.is_dir() && legacy.is_dir() {
+        return legacy;
+    }
+    next
 }
 
 fn stamp() -> String {
@@ -523,7 +530,7 @@ pub fn friendly_err(e: &anyhow::Error) -> String {
 fn friendly_text(s: &str) -> String {
     let low = s.to_ascii_lowercase();
     if low.contains("access is denied") || low.contains("os error 5") {
-        "Windows blocked access — try running SaveVault as administrator.".into()
+        "Windows blocked access — try running Omnexa as administrator.".into()
     } else if low.contains("os error 112") || low.contains("no space") || low.contains("disk full")
     {
         "Disk is full — free some space and try again.".into()

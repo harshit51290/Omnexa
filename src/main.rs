@@ -448,11 +448,11 @@ fn main() -> eframe::Result<()> {
         viewport: egui::ViewportBuilder::default()
             .with_inner_size([1280.0, 800.0])
             .with_min_inner_size([1024.0, 620.0])
-            .with_title("SaveVault — game save vault"),
+            .with_title("Omnexa — Universal Data Saver"),
         ..Default::default()
     };
     eframe::run_native(
-        "savevault",
+        "omnexa",
         opts,
         Box::new(|cc| {
             let mut style = (*cc.egui_ctx.style()).clone();
@@ -772,7 +772,7 @@ fn headless() -> eframe::Result<()> {
         if let Some(p) = args.get(i + 1) {
             return details_cmd(p);
         }
-        println!("usage: savevault --details <save file>");
+        println!("usage: omnexa --details <save file>");
         return Ok(());
     }
     for g in games::discover(&[]) {
@@ -916,14 +916,14 @@ impl eframe::App for App {
                     ui.horizontal(|ui| {
                         ui.label(egui::RichText::new("◈").size(24.0).strong().color(ACCENT));
                         ui.heading(
-                            egui::RichText::new("SAVEVAULT")
+                            egui::RichText::new("OMNEXA")
                                 .size(22.0)
                                 .strong()
                                 .color(TEXT),
                         );
                     });
                     ui.label(
-                        egui::RichText::new("G A M E   S A V E   V A U L T")
+                        egui::RichText::new("U N I V E R S A L   D A T A   S A V E R")
                             .size(10.5)
                             .color(VIOLET),
                     );
@@ -1036,50 +1036,57 @@ impl eframe::App for App {
                         let now = games::now_secs();
                         let running = self.running_cache.set.clone();
                         // Precompute protection cheaply per row via dir check.
-                        let items: Vec<(usize, String, String, bool, bool, bool, Option<PathBuf>)> = self
-                            .games
-                            .iter()
-                            .enumerate()
-                            .filter(|(_, g)| {
-                                q.is_empty() || g.name.to_ascii_lowercase().contains(&q)
-                            })
-                            .filter(|(_, g)| match self.filter {
-                                Filter::All => true,
-                                Filter::Protected => self.protection(g),
-                                Filter::NeedsBackup => !g.saves.is_empty() && !self.protection(g),
-                                Filter::Running => {
+                        let items: Vec<(usize, String, String, bool, bool, bool, Option<PathBuf>)> =
+                            self.games
+                                .iter()
+                                .enumerate()
+                                .filter(|(_, g)| {
+                                    q.is_empty() || g.name.to_ascii_lowercase().contains(&q)
+                                })
+                                .filter(|(_, g)| match self.filter {
+                                    Filter::All => true,
+                                    Filter::Protected => self.protection(g),
+                                    Filter::NeedsBackup => {
+                                        !g.saves.is_empty() && !self.protection(g)
+                                    }
+                                    Filter::Running => {
+                                        let names = g.exe_names();
+                                        names
+                                            .iter()
+                                            .any(|n| running.contains(&n.to_ascii_lowercase()))
+                                    }
+                                })
+                                .map(|(i, g)| {
+                                    let protected = self.protection(g);
                                     let names = g.exe_names();
-                                    names
+                                    let is_running = names
                                         .iter()
                                         .any(|n| running.contains(&n.to_ascii_lowercase()))
-                                }
-                            })
-                            .map(|(i, g)| {
-                                let protected = self.protection(g);
-                                let names = g.exe_names();
-                                let is_running = names.iter().any(|n| running.contains(&n.to_ascii_lowercase()))
-                                    && names.iter().any(|n| !n.is_empty());
-                                let mut sub = if g.saves.is_empty() {
-                                    "Installed · no saves yet".to_string()
-                                } else if protected {
-                                    format!("Protected · {}", g.progress)
-                                } else {
-                                    format!("Not backed up · {}", g.progress)
-                                };
-                                if let Some(t) = g.last_played {
-                                    sub.push_str(&format!(" · {}", games::fmt_relative(now, t)));
-                                }
-                                (
-                                    i,
-                                    g.name.clone(),
-                                    sub,
-                                    self.sel == Some(i),
-                                    protected,
-                                    is_running,
-                                    logos::find_cached(&self.backup_root, g),
-                                )
-                            })
-                            .collect();
+                                        && names.iter().any(|n| !n.is_empty());
+                                    let mut sub = if g.saves.is_empty() {
+                                        "Installed · no saves yet".to_string()
+                                    } else if protected {
+                                        format!("Protected · {}", g.progress)
+                                    } else {
+                                        format!("Not backed up · {}", g.progress)
+                                    };
+                                    if let Some(t) = g.last_played {
+                                        sub.push_str(&format!(
+                                            " · {}",
+                                            games::fmt_relative(now, t)
+                                        ));
+                                    }
+                                    (
+                                        i,
+                                        g.name.clone(),
+                                        sub,
+                                        self.sel == Some(i),
+                                        protected,
+                                        is_running,
+                                        logos::find_cached(&self.backup_root, g),
+                                    )
+                                })
+                                .collect();
                         if items.is_empty() && !self.scanning {
                             ui.label(
                                 egui::RichText::new("No games match this view.")
@@ -1186,7 +1193,7 @@ impl App {
             ui.add_space(28.0);
             ui.vertical_centered(|ui| {
                 ui.label(
-                    egui::RichText::new("◈ SAVEVAULT")
+                    egui::RichText::new("◈ OMNEXA")
                         .size(15.0)
                         .strong()
                         .color(ACCENT),
@@ -1258,12 +1265,7 @@ fn header_stat(ui: &mut egui::Ui, value: &str, label: &str) {
         .fill(CARD)
         .show(ui, |ui| {
             ui.vertical(|ui| {
-                ui.label(
-                    egui::RichText::new(value)
-                        .size(16.0)
-                        .strong()
-                        .color(TEXT),
-                );
+                ui.label(egui::RichText::new(value).size(16.0).strong().color(TEXT));
                 ui.label(egui::RichText::new(label).size(10.5).color(WEAK));
             });
         });
@@ -1315,8 +1317,8 @@ fn game_card(
                     .corner_radius(10.0),
             );
         } else {
-            let (rect, _) =
-                ui.allocate_exact_size(egui::vec2(ui.available_width(), 64.0), egui::Sense::hover());
+            let (rect, _) = ui
+                .allocate_exact_size(egui::vec2(ui.available_width(), 64.0), egui::Sense::hover());
             let p = ui.painter();
             p.rect_filled(rect, 10.0, avatar_color(name));
             p.text(
@@ -1336,12 +1338,7 @@ fn game_card(
             .show(ui, |ui| {
                 ui.set_width(ui.available_width());
                 let r = ui.vertical(|ui| {
-                    ui.label(
-                        egui::RichText::new(name)
-                            .strong()
-                            .size(15.5)
-                            .color(TEXT),
-                    );
+                    ui.label(egui::RichText::new(name).strong().size(15.5).color(TEXT));
                     ui.label(egui::RichText::new(sub).color(WEAK).size(12.5));
                     ui.add_space(4.0);
                     ui.horizontal_wrapped(|ui| {
@@ -1355,9 +1352,7 @@ fn game_card(
                             .corner_radius(20.0)
                             .fill(bg)
                             .show(ui, |ui| {
-                                ui.label(
-                                    egui::RichText::new(txt).size(10.5).strong().color(fg),
-                                );
+                                ui.label(egui::RichText::new(txt).size(10.5).strong().color(fg));
                             });
                         if running {
                             egui::Frame::new()
@@ -1893,7 +1888,7 @@ impl App {
             }
             ui.add_space(6.0);
             ui.label(egui::RichText::new(
-                "How it works: leave SaveVault running while you play. When a watched game closes, a copy lands in your backup folder — nothing uploaded anywhere.",
+                "How it works: leave Omnexa running while you play. When a watched game closes, a copy lands in your backup folder — nothing uploaded anywhere.",
             ).weak().size(13.0));
         });
     }

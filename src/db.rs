@@ -1,4 +1,4 @@
-//! Local history in SQLite (`<backup root>\savevault.db`):
+//! Local history in SQLite (`<backup root>\omnexa.db`):
 //! which games were seen when, backup records, and progress snapshots.
 //! The filesystem stays the source of truth — the DB is an index.
 
@@ -7,7 +7,13 @@ use std::path::Path;
 use crate::games::GameEntry;
 
 fn db_path(backup_root: &Path) -> std::path::PathBuf {
-    backup_root.join("savevault.db")
+    let next = backup_root.join("omnexa.db");
+    // Migrate gracefully: early builds used savevault.db.
+    let legacy = backup_root.join("savevault.db");
+    if !next.is_file() && legacy.is_file() {
+        let _ = std::fs::rename(&legacy, &next);
+    }
+    next
 }
 
 fn open(backup_root: &Path) -> Option<rusqlite::Connection> {

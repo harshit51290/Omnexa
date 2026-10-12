@@ -2307,6 +2307,29 @@ dependencies = [
 ]
 
 [[package]]
+name = "omnexa"
+version = "0.1.0"
+dependencies = [
+ "aes",
+ "anyhow",
+ "base64",
+ "chrono",
+ "dirs",
+ "eframe",
+ "egui",
+ "flate2",
+ "image",
+ "md5",
+ "rfd",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "sha2",
+ "ureq",
+ "winreg",
+]
+
+[[package]]
 name = "once_cell"
 version = "1.21.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2904,29 +2927,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "93fc1dc3aaa9bfed95e02e6eadabb4baf7e3078b0bd1b4d7b6b0b68378900502"
 dependencies = [
  "winapi-util",
-]
-
-[[package]]
-name = "savevault"
-version = "0.1.0"
-dependencies = [
- "aes",
- "anyhow",
- "base64",
- "chrono",
- "dirs",
- "eframe",
- "egui",
- "flate2",
- "image",
- "md5",
- "rfd",
- "rusqlite",
- "serde",
- "serde_json",
- "sha2",
- "ureq",
- "winreg",
 ]
 
 [[package]]
