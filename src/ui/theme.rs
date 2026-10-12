@@ -169,11 +169,7 @@ pub(crate) fn welcome_banner(
             .stroke(egui::Stroke::new(1.0_f32, BORDER))
             .show(ui, |ui| {
                 ui.set_width(ui.available_width());
-                ui.add(
-                    egui::Image::new(&tex)
-                        .max_height(170.0)
-                        .corner_radius(14.0),
-                );
+                ui.add(egui::Image::new(&tex).max_height(200.0).corner_radius(14.0));
             });
         ui.add_space(10.0);
     }

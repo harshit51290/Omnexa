@@ -19,6 +19,11 @@ pub struct Settings {
     /// SteamGridDB API key (free at steamgriddb.com) for cover art.
     #[serde(default)]
     pub sgdb_key: String,
+    /// Remembered window size (default 1440x900).
+    #[serde(default)]
+    pub win_w: f32,
+    #[serde(default)]
+    pub win_h: f32,
 }
 
 fn default_poll() -> u64 {
@@ -39,6 +44,8 @@ impl Default for Settings {
             retention: 8,
             custom_folders: Vec::new(),
             sgdb_key: String::new(),
+            win_w: 1440.0,
+            win_h: 900.0,
         }
     }
 }
@@ -50,6 +57,12 @@ pub fn load(backup_root: &std::path::Path) -> Settings {
             s.backup_root = backup_root.to_path_buf();
             if s.retention == 0 || s.retention > 100 {
                 s.retention = 8;
+            }
+            if s.win_w < 800.0 {
+                s.win_w = 1440.0;
+            }
+            if s.win_h < 500.0 {
+                s.win_h = 900.0;
             }
             // Drop legacy keys from the hardcoded-list era.
             s.watched.retain(|w| !w.starts_with("curated:"));
@@ -73,6 +86,37 @@ pub fn save(s: &Settings) {
     if let Ok(t) = serde_json::to_string_pretty(s) {
         let _ = std::fs::write(s.backup_root.join("settings.json"), t);
     }
+    remember_root(&s.backup_root);
+}
+
+/// Canonical home (new installs). The actual root may be a custom folder.
+pub fn home_root() -> PathBuf {
+    crate::core::backup::default_backup_root()
+}
+
+fn active_pointer() -> PathBuf {
+    home_root().join("active_root.txt")
+}
+
+/// Persist which folder is live so a custom choice survives restarts.
+pub fn remember_root(p: &std::path::Path) {
+    if !p.is_absolute() {
+        return;
+    }
+    let _ = std::fs::create_dir_all(home_root());
+    let _ = std::fs::write(active_pointer(), p.to_string_lossy().as_bytes());
+}
+
+/// Boot root: remembered custom folder when it still exists, else default.
+pub fn resolve_root() -> PathBuf {
+    let d = crate::core::backup::default_backup_root();
+    if let Ok(t) = std::fs::read_to_string(d.join("active_root.txt")) {
+        let p = PathBuf::from(t.trim());
+        if p.is_absolute() && p.is_dir() {
+            return p;
+        }
+    }
+    d
 }
 
 /// Lowercase exe names currently watched.

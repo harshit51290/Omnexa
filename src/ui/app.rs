@@ -56,6 +56,7 @@ pub(crate) struct App {
     restore_pick: Option<PathBuf>,
     job_rx: mpsc::Receiver<JobMsg>,
     job_tx: mpsc::Sender<JobMsg>,
+    win_saved: Option<Instant>,
 }
 
 #[derive(Clone)]
@@ -127,6 +128,7 @@ impl App {
             restore_pick: None,
             job_rx,
             job_tx,
+            win_saved: None,
         };
         app.start_scan();
         app
@@ -302,6 +304,26 @@ impl App {
                 }
             }
         }
+    }
+
+    /// Watchdog follows the live folder: respawn it after a root change.
+    /// (The old thread keeps polling the previous folder and goes idle.)
+    fn restart_watchdog(&mut self) {
+        let (tx, rx) = mpsc::channel();
+        settings::spawn_watchdog(self.backup_root.clone(), tx);
+        self.events_rx = rx;
+    }
+
+    /// Switch live backup folder: migrate settings, watchdog, UI state.
+    fn use_backup_root(&mut self, p: PathBuf) {
+        self.backup_root = p.clone();
+        self.settings = settings::load(&p);
+        self.settings.backup_root = p;
+        settings::save(&self.settings);
+        self.selected.clear();
+        self.views.clear();
+        self.refresh_backups();
+        self.restart_watchdog();
     }
 
     fn do_backup(&mut self, i: usize) {
@@ -884,6 +906,21 @@ impl eframe::App for App {
         self.poll_scan();
         self.poll_events();
         self.poll_jobs();
+        if let Some(r) = ctx.input(|i| i.viewport().inner_rect) {
+            let (w, h) = (r.width(), r.height());
+            if (w - self.settings.win_w).abs() > 4.0 || (h - self.settings.win_h).abs() > 4.0 {
+                let due = self
+                    .win_saved
+                    .map(|t| t.elapsed() > Duration::from_secs(10))
+                    .unwrap_or(true);
+                if due {
+                    self.settings.win_w = w;
+                    self.settings.win_h = h;
+                    settings::save(&self.settings);
+                    self.win_saved = Some(Instant::now());
+                }
+            }
+        }
         ctx.request_repaint_after(Duration::from_secs(2));
 
         egui::TopBottomPanel::top("top").show(ctx, |ui| {
@@ -1444,6 +1481,7 @@ impl App {
 
     /// About: what the app is, versions, credits.
     fn show_about(&mut self, ctx: &egui::Context, ui: &mut egui::Ui) {
+        ui.set_max_width(680.0);
         ui.add_space(8.0);
         ui.horizontal(|ui| {
             brand_logo(ctx, &mut self.textures, ui, 54.0);
@@ -1501,16 +1539,16 @@ impl App {
             ui.add_space(12.0);
             welcome_banner(ctx, &mut self.textures, ui);
             ui.vertical_centered(|ui| {
-                brand_logo(ctx, &mut self.textures, ui, 54.0);
+                brand_logo(ctx, &mut self.textures, ui, 60.0);
                 ui.label(
-                    egui::RichText::new("OMNEXA")
-                        .size(15.0)
+                    egui::RichText::new("⬢ OMNEXA ⬢")
+                        .size(14.0)
                         .strong()
-                        .color(ACCENT),
+                        .color(CYAN),
                 );
                 ui.heading(
                     egui::RichText::new("Your library, bulletproof.")
-                        .size(28.0)
+                        .size(32.0)
                         .strong()
                         .color(TEXT),
                 );
@@ -1518,12 +1556,29 @@ impl App {
                     egui::RichText::new(
                         "Every save, every character, every world — found automatically, backed up in one click, restored without fear. Everything stays on this PC.",
                     )
-                    .size(14.5)
+                    .size(14.0)
                     .color(WEAK),
                 );
+                ui.add_space(4.0);
+                if !self.scanning && !self.games.is_empty() {
+                    let files: usize = self.games.iter().map(|g| g.saves.len()).sum();
+                    ui.label(
+                        egui::RichText::new(format!(
+                            "{} games · {} save files · {} vaulted",
+                            self.games.len(),
+                            files,
+                            fmt_bytes(backup::backup_total(&self.backup_root)),
+                        ))
+                        .size(13.0)
+                        .strong()
+                        .color(GOOD),
+                    );
+                }
             });
-            ui.add_space(16.0);
-            ui.horizontal_wrapped(|ui| {
+            ui.add_space(14.0);
+            // Three equal steps: exact thirds so they never wrap mid-row.
+            let step_w = ((ui.available_width() - 16.0) / 3.0).clamp(170.0, 300.0);
+            ui.horizontal_top(|ui| {
                 for (n, t, d) in [
                     ("01", "PICK A GAME", "Your real library floats to the top, cover art included."),
                     ("02", "BACK IT UP", "One click. Every file fingerprinted and verified."),
@@ -1535,26 +1590,45 @@ impl App {
                         .stroke(egui::Stroke::new(1.0_f32, BORDER))
                         .fill(CARD)
                         .show(ui, |ui| {
-                            ui.set_width(200.0);
+                            ui.set_width(step_w);
                             ui.label(
-                                egui::RichText::new(n).strong().size(18.0).color(CYAN),
+                                egui::RichText::new(n).strong().size(22.0).color(CYAN),
                             );
                             ui.label(
                                 egui::RichText::new(t).strong().size(13.5).color(TEXT),
                             );
                             ui.label(egui::RichText::new(d).size(12.5).color(WEAK));
                         });
+                    ui.add_space(8.0);
                 }
             });
-            ui.add_space(12.0);
-            ui.horizontal(|ui| {
-                if ui.button("⟳ Re-scan").clicked() && !self.scanning {
-                    self.start_scan();
-                }
-                if ui.button("⚙ Open Settings").clicked() {
-                    self.view = Nav::Settings;
-                    self.root_edit = self.backup_root.to_string_lossy().to_string();
-                }
+            ui.add_space(14.0);
+            ui.vertical_centered(|ui| {
+                ui.horizontal(|ui| {
+                    let big = egui::Button::new(
+                        egui::RichText::new(if self.scanning {
+                            "Working…"
+                        } else {
+                            "⬢  PROTECT MY GAMES"
+                        })
+                        .strong()
+                        .size(14.5)
+                        .color(TEXT),
+                    )
+                    .fill(ACCENT)
+                    .corner_radius(12.0)
+                    .min_size(egui::vec2(220.0, 46.0));
+                    if ui.add_enabled(!self.scanning, big).clicked() {
+                        if let Some(i) = self.games.iter().position(|g| !g.saves.is_empty()) {
+                            self.sel = Some(i);
+                            self.refresh_backups();
+                        }
+                    }
+                    if ui.button("⚙ Open Settings").clicked() {
+                        self.view = Nav::Settings;
+                        self.root_edit = self.backup_root.to_string_lossy().to_string();
+                    }
+                });
             });
             if self.scanning {
                 ui.add_space(8.0);
@@ -1889,6 +1963,7 @@ impl App {
     }
 
     fn show_settings_panel(&mut self, ui: &mut egui::Ui) {
+        ui.set_max_width(680.0);
         egui::ScrollArea::vertical().id_salt("settings-scroll").show(ui, |ui| {
             ui.heading("Settings");
             ui.add_space(6.0);
@@ -1905,22 +1980,20 @@ impl App {
             ui.horizontal(|ui| {
                 if ui.button("Use this folder").clicked() {
                     let p = PathBuf::from(self.root_edit.trim());
-                    if p.is_absolute() {
-                        self.backup_root = p.clone();
-                        self.settings = settings::load(&p);
-                        self.settings.backup_root = p;
-                        settings::save(&self.settings);
-                        self.refresh_backups();
-                        self.toast("Backup folder updated.", true);
-                    } else {
+                    if !p.is_absolute() {
                         self.toast("That folder path doesn't look right.", false);
+                    } else if std::fs::create_dir_all(&p).is_err() {
+                        self.toast("Couldn't create that folder — check the drive.", false);
+                    } else {
+                        self.use_backup_root(p);
+                        self.root_edit = self.backup_root.to_string_lossy().to_string();
+                        self.toast("Backup folder updated — protection moved with it.", true);
                     }
                 }
                 if ui.button("Default").clicked() {
-                    self.backup_root = backup::default_backup_root();
+                    self.use_backup_root(backup::default_backup_root());
                     self.root_edit = self.backup_root.to_string_lossy().to_string();
-                    self.settings = settings::load(&self.backup_root);
-                    self.refresh_backups();
+                    self.toast("Back to the default folder.", true);
                 }
                 if ui.button("📂 Reveal").on_hover_text("Open in Explorer").clicked() {
                     let _ = std::process::Command::new("explorer")

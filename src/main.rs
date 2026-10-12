@@ -6,7 +6,7 @@ use eframe::egui;
 
 use std::sync::mpsc;
 
-use crate::core::{backup, settings};
+use crate::core::settings;
 use crate::ui::app::{self, App};
 use crate::ui::theme::*;
 
@@ -15,11 +15,14 @@ fn main() -> eframe::Result<()> {
         return app::headless();
     }
     let (tx, rx) = mpsc::channel::<String>();
-    let boot_root = backup::default_backup_root();
-    let boot_root = settings::load(&boot_root).backup_root;
+    let boot_cfg = settings::load(&settings::resolve_root());
+    let boot_root = boot_cfg.backup_root.clone();
     settings::spawn_watchdog(boot_root, tx);
     let mut vp = egui::ViewportBuilder::default()
-        .with_inner_size([1440.0, 900.0])
+        .with_inner_size([
+            boot_cfg.win_w.clamp(1024.0, 2560.0),
+            boot_cfg.win_h.clamp(620.0, 1440.0),
+        ])
         .with_min_inner_size([1024.0, 620.0])
         .with_title("Omnexa — Universal Data Saver");
     // Taskbar/window icon from the embedded brand logo.
