@@ -892,17 +892,17 @@ impl eframe::App for App {
                 // Brand block: vault-shield mark + wordmark.
                 ui.vertical(|ui| {
                     ui.horizontal(|ui| {
-                        logo_mark(ui, 34.0);
+                        brand_logo(ctx, &mut self.textures, ui, 34.0);
                         ui.heading(
                             egui::RichText::new("OMNEXA")
-                                .size(22.0)
+                                .size(19.0)
                                 .strong()
                                 .color(TEXT),
                         );
                     });
                     ui.label(
                         egui::RichText::new("U N I V E R S A L   D A T A   S A V E R")
-                            .size(10.5)
+                            .size(9.5)
                             .color(CYAN),
                     );
                 });
@@ -946,7 +946,7 @@ impl eframe::App for App {
                 ui.add(
                     egui::TextEdit::singleline(&mut self.search)
                         .hint_text("Search your library…")
-                        .desired_width(240.0),
+                        .desired_width(210.0),
                 );
                 if self.scanning {
                     ui.spinner();
@@ -971,7 +971,7 @@ impl eframe::App for App {
                 ] {
                     let on = self.filter == f;
                     let b = egui::Button::new(
-                        egui::RichText::new(label).size(12.5).strong().color(TEXT),
+                        egui::RichText::new(label).size(12.0).strong().color(TEXT),
                     )
                     .fill(if on { ACCENT } else { CARD })
                     .stroke(egui::Stroke::new(1.0_f32, if on { ACCENT } else { BORDER }));
@@ -986,7 +986,7 @@ impl eframe::App for App {
         // Left nav rail: Games / Backups / Settings / About + storage card.
         egui::SidePanel::left("nav")
             .resizable(false)
-            .default_width(196.0)
+            .default_width(176.0)
             .show(ctx, |ui| {
                 ui.add_space(10.0);
                 for (label, icon, v) in [
@@ -998,7 +998,7 @@ impl eframe::App for App {
                     let on = self.view == v;
                     let b = egui::Button::new(
                         egui::RichText::new(format!("{icon}  {label}"))
-                            .size(14.0)
+                            .size(13.0)
                             .strong()
                             .color(if on { CYAN } else { WEAK }),
                     )
@@ -1012,7 +1012,7 @@ impl eframe::App for App {
                         },
                     ))
                     .corner_radius(10.0)
-                    .min_size(egui::vec2(ui.available_width(), 40.0));
+                    .min_size(egui::vec2(ui.available_width(), 36.0));
                     if ui.add(b).clicked() {
                         self.view = v;
                         if v == Nav::Settings {
@@ -1031,13 +1031,13 @@ impl eframe::App for App {
             egui::CentralPanel::default().show(ctx, |ui| match self.view {
                 Nav::Backups => self.show_all_backups(ctx, ui),
                 Nav::Settings => self.show_settings_panel(ui),
-                Nav::About => self.show_about(ui),
+                Nav::About => self.show_about(ctx, ui),
                 Nav::Games => {}
             });
         } else {
             egui::SidePanel::left("games")
                 .resizable(true)
-                .default_width(348.0)
+                .default_width(318.0)
                 .show(ctx, |ui| {
                     ui.add_space(6.0);
                     // Skeleton rows while scanning: perceived performance.
@@ -1065,7 +1065,8 @@ impl eframe::App for App {
                                     .color(TEXT),
                             )
                             .fill(ACCENT)
-                            .corner_radius(10.0);
+                            .corner_radius(10.0)
+                            .min_size(egui::vec2(190.0, 36.0));
                             if ui.add_enabled(self.busy.is_none(), b).clicked() {
                                 self.do_backup_batch();
                             }
@@ -1191,7 +1192,7 @@ impl eframe::App for App {
             ui.add_space(6.0);
             match self.sel {
                 Some(i) if i < self.games.len() => self.show_game(ctx, ui, i),
-                _ => self.show_welcome(ui),
+                _ => self.show_welcome(ctx, ui),
             }
         });
 
@@ -1324,7 +1325,7 @@ impl App {
         ui.add_space(8.0);
         ui.heading(
             egui::RichText::new("All backups")
-                .size(24.0)
+                .size(20.0)
                 .strong()
                 .color(TEXT),
         );
@@ -1365,7 +1366,7 @@ impl App {
                             ui.horizontal(|ui| {
                                 ui.vertical(|ui| {
                                     ui.label(
-                                        egui::RichText::new(game).strong().size(14.5).color(TEXT),
+                                        egui::RichText::new(game).strong().size(13.5).color(TEXT),
                                     );
                                     ui.label(
                                         egui::RichText::new(format!(
@@ -1442,14 +1443,14 @@ impl App {
     }
 
     /// About: what the app is, versions, credits.
-    fn show_about(&self, ui: &mut egui::Ui) {
+    fn show_about(&mut self, ctx: &egui::Context, ui: &mut egui::Ui) {
         ui.add_space(8.0);
         ui.horizontal(|ui| {
-            logo_mark(ui, 54.0);
+            brand_logo(ctx, &mut self.textures, ui, 54.0);
             ui.vertical(|ui| {
                 ui.heading(
                     egui::RichText::new("OMNEXA")
-                        .size(26.0)
+                        .size(22.0)
                         .strong()
                         .color(TEXT),
                 );
@@ -1495,11 +1496,12 @@ impl App {
     }
 
     /// First-run welcome: the vault pitch, gaming style.
-    fn show_welcome(&mut self, ui: &mut egui::Ui) {
+    fn show_welcome(&mut self, ctx: &egui::Context, ui: &mut egui::Ui) {
         egui::ScrollArea::vertical().id_salt("welcome").show(ui, |ui| {
-            ui.add_space(28.0);
+            ui.add_space(12.0);
+            welcome_banner(ctx, &mut self.textures, ui);
             ui.vertical_centered(|ui| {
-                logo_mark(ui, 54.0);
+                brand_logo(ctx, &mut self.textures, ui, 54.0);
                 ui.label(
                     egui::RichText::new("OMNEXA")
                         .size(15.0)
@@ -1508,7 +1510,7 @@ impl App {
                 );
                 ui.heading(
                     egui::RichText::new("Your library, bulletproof.")
-                        .size(34.0)
+                        .size(28.0)
                         .strong()
                         .color(TEXT),
                 );
@@ -1533,12 +1535,12 @@ impl App {
                         .stroke(egui::Stroke::new(1.0_f32, BORDER))
                         .fill(CARD)
                         .show(ui, |ui| {
-                            ui.set_width(210.0);
+                            ui.set_width(200.0);
                             ui.label(
-                                egui::RichText::new(n).strong().size(20.0).color(CYAN),
+                                egui::RichText::new(n).strong().size(18.0).color(CYAN),
                             );
                             ui.label(
-                                egui::RichText::new(t).strong().size(14.0).color(TEXT),
+                                egui::RichText::new(t).strong().size(13.5).color(TEXT),
                             );
                             ui.label(egui::RichText::new(d).size(12.5).color(WEAK));
                         });
@@ -1594,13 +1596,9 @@ impl App {
                             .stroke(egui::Stroke::new(1.0_f32, BORDER))
                             .show(ui, |ui| {
                                 ui.set_width(ui.available_width());
-                                ui.add(
-                                    egui::Image::new(&tex)
-                                        .fit_to_exact_size(egui::vec2(
-                                            ui.available_width(),
-                                            210.0,
-                                        ))
-                                        .corner_radius(14.0),
+                                ui.add_sized(
+                                    egui::vec2(ui.available_width(), 190.0),
+                                    egui::Image::new(&tex).corner_radius(12.0),
                                 );
                             });
                         ui.add_space(8.0);
@@ -1621,13 +1619,13 @@ impl App {
                         }
                         ui.heading(
                             egui::RichText::new(&g.name)
-                                .size(30.0)
+                                .size(24.0)
                                 .strong()
                                 .color(TEXT),
                         );
                         ui.label(
                             egui::RichText::new(&g.progress)
-                                .size(15.0)
+                                .size(13.5)
                                 .color(CYAN),
                         );
                     });
@@ -1684,11 +1682,11 @@ impl App {
                         egui::RichText::new(if busy { "WORKING…" } else { "▶  BACK UP NOW" })
                             .strong()
                             .color(TEXT)
-                            .size(16.0),
+                            .size(14.5),
                     )
                     .fill(ACCENT)
                     .corner_radius(12.0)
-                    .min_size(egui::vec2(220.0, 52.0));
+                    .min_size(egui::vec2(200.0, 44.0));
                     if ui.add_enabled(!g.saves.is_empty() && !busy, b).clicked() {
                         self.do_backup(i);
                     }
@@ -1702,11 +1700,11 @@ impl App {
                         ""
                     };
                     let r = egui::Button::new(
-                        egui::RichText::new("RESTORE").size(15.0).strong().color(TEXT),
+                        egui::RichText::new("RESTORE").size(14.0).strong().color(TEXT),
                     )
                     .stroke(egui::Stroke::new(1.5_f32, CYAN))
                     .corner_radius(12.0)
-                    .min_size(egui::vec2(170.0, 52.0));
+                    .min_size(egui::vec2(150.0, 44.0));
                     let resp = ui.add_enabled(!self.backups.is_empty() && !running && !busy, r);
                     if resp.clicked() {
                         // Restore the newest by default; full list below for older ones.
@@ -1770,7 +1768,7 @@ impl App {
                         .show(ui, |ui| {
                             ui.horizontal(|ui| {
                                 ui.vertical(|ui| {
-                                    ui.label(egui::RichText::new(&b.label).strong().size(14.0).color(TEXT));
+                                    ui.label(egui::RichText::new(&b.label).strong().size(13.5).color(TEXT));
                                     ui.label(egui::RichText::new(format!(
                                         "{} files · {}{}",
                                         b.files,

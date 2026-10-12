@@ -84,13 +84,13 @@ pub(crate) fn avatar(ui: &mut egui::Ui, name: &str, size: f32) {
 /// Small dashboard number in the header strip.
 pub(crate) fn header_stat(ui: &mut egui::Ui, value: &str, label: &str) {
     egui::Frame::new()
-        .inner_margin(egui::Margin::symmetric(12, 6))
+        .inner_margin(egui::Margin::symmetric(10, 5))
         .corner_radius(10.0)
         .stroke(egui::Stroke::new(1.0_f32, BORDER))
         .fill(CARD)
         .show(ui, |ui| {
             ui.vertical(|ui| {
-                ui.label(egui::RichText::new(value).size(16.0).strong().color(TEXT));
+                ui.label(egui::RichText::new(value).size(14.0).strong().color(TEXT));
                 ui.label(egui::RichText::new(label).size(10.5).color(WEAK));
             });
         });
@@ -99,7 +99,7 @@ pub(crate) fn header_stat(ui: &mut egui::Ui, value: &str, label: &str) {
 /// Stat chip for the game hero: dim label over a bright value.
 pub(crate) fn detail_chip(ui: &mut egui::Ui, icon: &str, label: &str, value: &str) {
     egui::Frame::new()
-        .inner_margin(egui::Margin::symmetric(12, 7))
+        .inner_margin(egui::Margin::symmetric(10, 6))
         .corner_radius(10.0)
         .stroke(egui::Stroke::new(1.0_f32, BORDER))
         .fill(CARD)
@@ -109,12 +109,75 @@ pub(crate) fn detail_chip(ui: &mut egui::Ui, icon: &str, label: &str, value: &st
                     ui.label(egui::RichText::new(icon).color(CYAN).size(13.0));
                     ui.label(egui::RichText::new(label).size(10.0).color(WEAK_DIM));
                 });
-                ui.label(egui::RichText::new(value).size(14.5).strong().color(TEXT));
+                ui.label(egui::RichText::new(value).size(13.5).strong().color(TEXT));
             });
         });
 }
 
-/// Drawn vault-shield logo mark (used until brand PNGs land in assets/).
+/// Brand art baked into the binary (assets/ is also the README source).
+const LOGO_BYTES: &[u8] = include_bytes!("../../assets/logo.png");
+const BANNER_BYTES: &[u8] = include_bytes!("../../assets/banner.png");
+
+/// Brand texture from embedded PNGs, decoded once and cached.
+pub(crate) fn brand_texture(
+    ctx: &egui::Context,
+    textures: &mut HashMap<String, egui::TextureHandle>,
+    key: &'static str,
+    bytes: &'static [u8],
+) -> Option<egui::TextureHandle> {
+    if let Some(h) = textures.get(key) {
+        return Some(h.clone());
+    }
+    let img = image::load_from_memory(bytes).ok()?.to_rgba8();
+    let (w, h) = (img.width() as usize, img.height() as usize);
+    if w == 0 || h == 0 || w * h > 12_000_000 {
+        return None;
+    }
+    let color = egui::ColorImage::from_rgba_unmultiplied([w, h], &img.into_raw());
+    let handle = ctx.load_texture(key, color, egui::TextureOptions::LINEAR);
+    textures.insert(key.to_string(), handle.clone());
+    Some(handle)
+}
+
+/// App logo (embedded assets/logo.png), with drawn fallback.
+pub(crate) fn brand_logo(
+    ctx: &egui::Context,
+    textures: &mut HashMap<String, egui::TextureHandle>,
+    ui: &mut egui::Ui,
+    size: f32,
+) {
+    if let Some(tex) = brand_texture(ctx, textures, "brand-logo", LOGO_BYTES) {
+        ui.add(
+            egui::Image::new(&tex)
+                .fit_to_exact_size(egui::vec2(size, size))
+                .corner_radius(size * 0.25),
+        );
+    } else {
+        logo_mark(ui, size);
+    }
+}
+
+/// Welcome banner (embedded assets/banner.png). Returns false when missing.
+pub(crate) fn welcome_banner(
+    ctx: &egui::Context,
+    textures: &mut HashMap<String, egui::TextureHandle>,
+    ui: &mut egui::Ui,
+) {
+    if let Some(tex) = brand_texture(ctx, textures, "brand-banner", BANNER_BYTES) {
+        egui::Frame::new()
+            .corner_radius(16.0)
+            .stroke(egui::Stroke::new(1.0_f32, BORDER))
+            .show(ui, |ui| {
+                ui.set_width(ui.available_width());
+                ui.add(
+                    egui::Image::new(&tex)
+                        .max_height(170.0)
+                        .corner_radius(14.0),
+                );
+            });
+        ui.add_space(10.0);
+    }
+}
 pub(crate) fn logo_mark(ui: &mut egui::Ui, size: f32) {
     let (rect, _) = ui.allocate_exact_size(egui::vec2(size, size), egui::Sense::hover());
     let p = ui.painter();
@@ -155,11 +218,11 @@ pub(crate) fn logo_mark(ui: &mut egui::Ui, size: f32) {
 
 /// Storage ring: honest fraction of app-managed bytes that are backups.
 pub(crate) fn storage_ring(ui: &mut egui::Ui, frac: f32, center_text: &str) {
-    let size = egui::vec2(120.0, 104.0);
+    let size = egui::vec2(104.0, 92.0);
     let (rect, _) = ui.allocate_exact_size(size, egui::Sense::hover());
     let p = ui.painter();
     let c = rect.center();
-    p.circle_stroke(c, 44.0, egui::Stroke::new(9.0_f32, BORDER));
+    p.circle_stroke(c, 38.0, egui::Stroke::new(8.0_f32, BORDER));
     let frac = frac.clamp(0.0, 1.0);
     if frac > 0.005 {
         let n = 72_usize;
@@ -168,16 +231,16 @@ pub(crate) fn storage_ring(ui: &mut egui::Ui, frac: f32, center_text: &str) {
             .map(|i| {
                 let a =
                     -std::f32::consts::FRAC_PI_2 + (i as f32 / n as f32) * std::f32::consts::TAU;
-                c + egui::vec2(a.cos() * 44.0, a.sin() * 44.0)
+                c + egui::vec2(a.cos() * 38.0, a.sin() * 38.0)
             })
             .collect();
-        p.line(pts, egui::Stroke::new(9.0_f32, ACCENT));
+        p.line(pts, egui::Stroke::new(8.0_f32, ACCENT));
     }
     p.text(
         c,
         egui::Align2::CENTER_CENTER,
         center_text,
-        egui::FontId::proportional(19.0),
+        egui::FontId::proportional(17.0),
         TEXT,
     );
 }

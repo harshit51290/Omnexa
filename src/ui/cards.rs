@@ -32,10 +32,9 @@ pub(crate) fn game_card(
     frame.show(ui, |ui| {
         ui.set_width(ui.available_width());
         if let Some(tex) = logo.as_ref().and_then(|p| logo_texture(ctx, textures, p)) {
-            ui.add(
-                egui::Image::new(&tex)
-                    .fit_to_exact_size(egui::vec2(ui.available_width(), 96.0))
-                    .corner_radius(10.0),
+            ui.add_sized(
+                egui::vec2(ui.available_width(), 110.0),
+                egui::Image::new(&tex).corner_radius(8.0),
             );
         } else {
             let (rect, _) = ui
@@ -60,7 +59,7 @@ pub(crate) fn game_card(
                 ui.set_width(ui.available_width());
                 let r = ui.vertical(|ui| {
                     ui.horizontal(|ui| {
-                        ui.label(egui::RichText::new(name).strong().size(15.5).color(TEXT));
+                        ui.label(egui::RichText::new(name).strong().size(14.0).color(TEXT));
                         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                             let mut c = checked;
                             if ui
@@ -72,7 +71,7 @@ pub(crate) fn game_card(
                             }
                         });
                     });
-                    ui.label(egui::RichText::new(sub).color(WEAK).size(12.5));
+                    ui.label(egui::RichText::new(sub).color(WEAK).size(12.0));
                     ui.add_space(4.0);
                     ui.horizontal_wrapped(|ui| {
                         let (txt, fg, bg) = if protected {
