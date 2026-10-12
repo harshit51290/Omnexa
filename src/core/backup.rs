@@ -6,7 +6,7 @@
 //! long the original save path is. Human-readable names live in manifests and
 //! the SQLite index — never in folder/file names.
 
-use crate::games::{scan_files, GameEntry};
+use crate::core::games::{scan_files, GameEntry};
 use anyhow::Result;
 use sha2::{Digest, Sha256};
 use std::path::{Path, PathBuf};
@@ -266,7 +266,7 @@ pub fn restore_backup(backup_dir: &Path) -> Result<(usize, u64)> {
             .map(|e| e.eq_ignore_ascii_case("sl2"))
             == Some(true)
         {
-            let _ = crate::bnd4::resign_sl2(&to);
+            let _ = crate::parsers::bnd4::resign_sl2(&to);
         }
         n += 1;
         bytes += b;

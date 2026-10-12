@@ -101,7 +101,7 @@ pub fn fmt_num(n: u32) -> String {
 
 /// Parse every character slot (entries 0-9) of an S0000.sl2 file.
 pub fn parse(file: &[u8]) -> Result<Vec<SekiroSlot>> {
-    let entries = crate::bnd4::entries(file)?;
+    let entries = crate::parsers::bnd4::entries(file)?;
     // Occupancy array lives in the menu entry (10), one byte per slot.
     // Falls back to content sniffing when unreadable — never hides characters.
     let occupancy: Option<Vec<bool>> = entries.get(10).and_then(|menu| {

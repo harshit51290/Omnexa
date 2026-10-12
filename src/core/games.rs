@@ -1060,7 +1060,7 @@ fn detect_fs(saves: &[DetectedFile]) -> Option<FsKind> {
     // Unknown name: sniff content. BND4 + a valid ER roster = Elden Ring.
     if let Ok(bytes) = std::fs::read(&sl2.path) {
         if bytes.len() > 0x40 && &bytes[0..4] == b"BND4" {
-            if crate::elden::parse(&bytes)
+            if crate::parsers::elden::parse(&bytes)
                 .map(|s| s.iter().any(|x| x.active))
                 .unwrap_or(false)
             {
@@ -1086,8 +1086,8 @@ fn progress_line(fs: Option<FsKind>, found: &[DetectedFile]) -> String {
                     == Some(true)
             }) {
                 if let Ok(bytes) = std::fs::read(&f.path) {
-                    if let Ok(slots) = crate::sekiro::parse(&bytes) {
-                        let used: Vec<&crate::sekiro::SekiroSlot> =
+                    if let Ok(slots) = crate::parsers::sekiro::parse(&bytes) {
+                        let used: Vec<&crate::parsers::sekiro::SekiroSlot> =
                             slots.iter().filter(|s| s.used).collect();
                         if used.is_empty() {
                             return "Save present · no characters yet".into();
@@ -1096,7 +1096,7 @@ fn progress_line(fs: Option<FsKind>, found: &[DetectedFile]) -> String {
                             let s = used[0];
                             return format!(
                                 "1 character · {} played",
-                                crate::sekiro::fmt_playtime(s.playtime_secs)
+                                crate::parsers::sekiro::fmt_playtime(s.playtime_secs)
                             );
                         }
                         return format!("{} characters", used.len());
@@ -1114,7 +1114,7 @@ fn progress_line(fs: Option<FsKind>, found: &[DetectedFile]) -> String {
                     == Some(true)
             }) {
                 if let Ok(bytes) = std::fs::read(&f.path) {
-                    if let Ok(slots) = crate::elden::parse(&bytes) {
+                    if let Ok(slots) = crate::parsers::elden::parse(&bytes) {
                         let chars: Vec<String> = slots
                             .iter()
                             .filter(|s| s.active)

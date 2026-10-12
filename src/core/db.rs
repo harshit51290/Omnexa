@@ -4,7 +4,7 @@
 
 use std::path::Path;
 
-use crate::games::GameEntry;
+use crate::core::games::GameEntry;
 
 fn db_path(backup_root: &Path) -> std::path::PathBuf {
     let next = backup_root.join("omnexa.db");

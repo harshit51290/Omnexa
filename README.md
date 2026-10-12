@@ -53,10 +53,17 @@ saves are merged. FromSoftware saves are recognised by signature
 
 ## Experience
 
-- Welcome screen on first run (3 steps, no jargon), filter chips
-  (All / Protected / Needs backup / Running), skeleton rows while scanning.
-- Game rows show protection state ("✓ Protected" / "○ Not backed up"),
-  never internal source names.
+- Cinematic blue library theme (`#050B14` → `#101D32`, electric `#168CFF`,
+  cyan `#35D7FF`): nav rail (Games / Backups / Settings / About), live
+  vault stats, cover-first cards, hero banners, stat chips.
+- Filter chips carry live counts (All / Protected / Needs backup / Running),
+  skeleton rows while scanning, welcome screen on first run.
+- Game cards show protection pills + running badges + batch-select
+  checkboxes; “Back up N selected” backs them all up in one background job.
+- Storage card shows honest app-managed bytes (backups vs saves ring) —
+  never invented disk totals.
+- Dedicated Backups page: every backup of every game with restore, folder
+  reveal, and arm-then-confirm delete. About page with version + credits.
 - Backup history lists every entry with date, size and ✓ verified badge;
   each row has its own Restore + Folder buttons. Restores ask for
   confirmation and always keep a pre-restore safety copy.
@@ -64,6 +71,18 @@ saves are merged. FromSoftware saves are recognised by signature
   results arrive as toasts, never a lost status line.
 - Settings are sectioned (Backups / Cover art / Auto-protect / Folders)
   with live disk-usage readout.
+
+## Codebase layout
+
+```
+src/main.rs          tiny entry: mods + window setup + headless dispatch
+src/core/            backend: games (discovery), backup (engine),
+                     db (SQLite index), logos (cover art), settings
+src/parsers/         save readers: sekiro, elden, hollow, gvas,
+                     minecraft, shady (+ bnd4 container)
+src/ui/              app (shell, views, jobs), theme (tokens, badges,
+                     logo mark, storage ring), cards (library + save cards)
+```
 
 ## What it understands inside saves
 

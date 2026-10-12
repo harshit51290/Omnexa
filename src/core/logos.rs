@@ -8,7 +8,7 @@
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
-use crate::games::GameEntry;
+use crate::core::games::GameEntry;
 
 fn cache_dir(backup_root: &Path) -> PathBuf {
     backup_root.join("cache").join("logos")
@@ -47,7 +47,7 @@ pub fn find_cached(backup_root: &Path, entry: &GameEntry) -> Option<PathBuf> {
 /// Steam `appmanifest_*.acf` → installdir → appid, across all libraries.
 fn steam_appids() -> HashMap<String, String> {
     let mut out = HashMap::new();
-    for lib in crate::games::steam_library_dirs() {
+    for lib in crate::core::games::steam_library_dirs() {
         if let Ok(rd) = std::fs::read_dir(&lib) {
             for e in rd.flatten().take(200) {
                 let p = e.path();
@@ -88,7 +88,7 @@ fn steam_cache_dirs() -> Vec<PathBuf> {
         PathBuf::from(r"C:\Program Files (x86)\Steam\appcache\librarycache"),
         PathBuf::from(r"C:\Program Files\Steam\appcache\librarycache"),
     ];
-    for lib in crate::games::steam_library_dirs() {
+    for lib in crate::core::games::steam_library_dirs() {
         if let Some(steam_root) = lib.parent() {
             let p = steam_root.join("appcache").join("librarycache");
             if !v.contains(&p) {

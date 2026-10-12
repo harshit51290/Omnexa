@@ -66,7 +66,7 @@ pub fn attr_names() -> [&'static str; 8] {
 
 /// Parse roster (menu entry 10, checksum included) + per-slot stats.
 pub fn parse(file: &[u8]) -> Result<Vec<ErSlot>> {
-    let entries = crate::bnd4::entries(file)?;
+    let entries = crate::parsers::bnd4::entries(file)?;
     if entries.len() < 11 {
         anyhow::bail!("no menu entry");
     }

@@ -32,7 +32,7 @@ fn default_retention() -> usize {
 impl Default for Settings {
     fn default() -> Self {
         Self {
-            backup_root: crate::backup::default_backup_root(),
+            backup_root: crate::core::backup::default_backup_root(),
             auto_backup: false,
             watched: Vec::new(),
             poll_secs: 10,
@@ -92,7 +92,7 @@ pub fn watched_exes(backup_root: &std::path::Path) -> HashSet<String> {
         } else {
             // Legacy key without exe: resolve install exes now.
             let p = PathBuf::from(root);
-            if let Some(found) = crate::games::find_exe(&p) {
+            if let Some(found) = crate::core::games::find_exe(&p) {
                 if let Some(n) = found.file_name().and_then(|x| x.to_str()) {
                     out.insert(n.to_ascii_lowercase());
                 }
