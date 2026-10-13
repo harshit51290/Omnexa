@@ -1,3 +1,5 @@
+// Hallmark · redesign · genre: atmospheric · macrostructure: Workbench + Centered Hero
+// theme: OMNEXA brand custom (anchor #168CFF) · designed-as-app · system: design.md
 use eframe::egui;
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -157,6 +159,25 @@ pub(crate) fn brand_logo(
     }
 }
 
+/// Centered cover-art box: aspect-kept, letterboxed on CARD, never distorted.
+pub(crate) fn cover_art(ui: &mut egui::Ui, tex: &egui::TextureHandle, height: f32) {
+    let w = ui.available_width();
+    let (rect, _) = ui.allocate_exact_size(egui::vec2(w, height), egui::Sense::hover());
+    let p = ui.painter();
+    p.rect_filled(rect, 12.0, CARD);
+    let t = tex.size_vec2();
+    if t.x > 1.0 && t.y > 1.0 {
+        let s = ((rect.width() / t.x).min(rect.height() / t.y)).min(2.0);
+        let r = egui::Rect::from_center_size(rect.center(), t * s);
+        p.image(
+            tex.id(),
+            r,
+            egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0)),
+            egui::Color32::WHITE,
+        );
+    }
+}
+
 /// Welcome banner (embedded assets/banner.png). Returns false when missing.
 pub(crate) fn welcome_banner(
     ctx: &egui::Context,
@@ -169,7 +190,7 @@ pub(crate) fn welcome_banner(
             .stroke(egui::Stroke::new(1.0_f32, BORDER))
             .show(ui, |ui| {
                 ui.set_width(ui.available_width());
-                ui.add(egui::Image::new(&tex).max_height(200.0).corner_radius(14.0));
+                cover_art(ui, &tex, 200.0);
             });
         ui.add_space(10.0);
     }
@@ -243,9 +264,14 @@ pub(crate) fn storage_ring(ui: &mut egui::Ui, frac: f32, center_text: &str) {
 
 /// Small caps section header with an accent count on the right.
 pub(crate) fn section_title(ui: &mut egui::Ui, icon: &str, title: &str, extra: &str) {
+    let head = if icon.is_empty() {
+        title.to_string()
+    } else {
+        format!("{icon} {title}")
+    };
     ui.horizontal(|ui| {
         ui.label(
-            egui::RichText::new(format!("{icon} {title}"))
+            egui::RichText::new(head)
                 .color(CYAN)
                 .size(12.5)
                 .strong(),

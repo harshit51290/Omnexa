@@ -32,10 +32,7 @@ pub(crate) fn game_card(
     frame.show(ui, |ui| {
         ui.set_width(ui.available_width());
         if let Some(tex) = logo.as_ref().and_then(|p| logo_texture(ctx, textures, p)) {
-            ui.add_sized(
-                egui::vec2(ui.available_width(), 110.0),
-                egui::Image::new(&tex).corner_radius(8.0),
-            );
+            cover_art(ui, &tex, 110.0);
         } else {
             let (rect, _) = ui
                 .allocate_exact_size(egui::vec2(ui.available_width(), 64.0), egui::Sense::hover());
@@ -143,12 +140,12 @@ pub(crate) fn sekiro_card(ui: &mut egui::Ui, s: &sekiro::SekiroSlot) {
             ui.add_space(4.0);
             let num = sekiro::fmt_num;
             match s.attack {
-                Some(a) if a > 1 => ui.label(format!("⚔ Attack {a} · {} bosses beaten", a - 1)),
-                _ => ui.label("⚔ Attack 1 · no bosses beaten yet"),
+                Some(a) if a > 1 => ui.label(format!("Attack {a} · {} bosses beaten", a - 1)),
+                _ => ui.label("Attack 1 · no bosses beaten yet"),
             };
             match s.vitality {
-                Some(v) if v > 1 => ui.label(format!("❤ Vitality {v} · {} necklaces used", v - 1)),
-                _ => ui.label("❤ Vitality 1 · no necklaces yet"),
+                Some(v) if v > 1 => ui.label(format!("Vitality {v} · {} necklaces used", v - 1)),
+                _ => ui.label("Vitality 1 · no necklaces yet"),
             };
             ui.horizontal_wrapped(|ui| {
                 ui.label(format!(
@@ -165,35 +162,35 @@ pub(crate) fn sekiro_card(ui: &mut egui::Ui, s: &sekiro::SekiroSlot) {
             });
             match s.gourd {
                 Some(g) if g > 1 => ui.label(format!(
-                    "🎃 Gourd: {g} sips · {} seeds given to Emma",
+                    "Gourd: {g} sips · {} seeds given to Emma",
                     g - 1
                 )),
-                _ => ui.label("🎃 Gourd: 1 sip"),
+                _ => ui.label("Gourd: 1 sip"),
             };
             ui.horizontal_wrapped(|ui| {
-                ui.label(format!("✦ {} skill points", num(s.skill_points)));
+                ui.label(format!("{} skill points", num(s.skill_points)));
                 ui.label(egui::RichText::new("·").color(WEAK));
-                ui.label(format!("💀 {} memories held", s.memories_held));
+                ui.label(format!("{} memories held", s.memories_held));
             });
             if !s.bosses.is_empty() {
                 ui.label(
-                    egui::RichText::new(format!("👹 Beaten: {}", s.bosses.join(" · "))).size(12.0),
+                    egui::RichText::new(format!("Beaten: {}", s.bosses.join(" · "))).size(12.0),
                 );
             }
             let idols_lit: usize = s.idol_areas.iter().map(|(_, l, _)| l).sum();
             let idols_total: usize = s.idol_areas.iter().map(|(_, _, t)| t).sum();
             ui.horizontal_wrapped(|ui| {
-                ui.label(format!("🕯 {idols_lit} of {idols_total} idols lit"));
+                ui.label(format!("Idols lit: {idols_lit} of {idols_total}"));
                 if !s.endings.is_empty() {
                     ui.label(egui::RichText::new("·").color(WEAK));
-                    ui.label(format!("🏁 {}", s.endings.join(", ")));
+                    ui.label(format!("{}", s.endings.join(", ")));
                 }
             });
             if !s.cats.is_empty() {
                 let line: Vec<String> = s.cats.iter().map(|(n, c)| format!("{n}: {c}")).collect();
                 ui.label(
                     egui::RichText::new(format!(
-                        "🎒 {} carried · {} in storage — {}",
+                        "{} carried · {} in storage — {}",
                         s.carried,
                         s.stored,
                         line.join(" · ")
@@ -287,7 +284,7 @@ pub(crate) fn hollow_card(ui: &mut egui::Ui, label: &str, s: &hollow::HollowSave
             });
             ui.horizontal_wrapped(|ui| {
                 ui.label(format!(
-                    "❤ {} masks",
+                    "{} masks",
                     s.health
                         .or(s.max_health)
                         .map(|n| n.to_string())
@@ -296,12 +293,12 @@ pub(crate) fn hollow_card(ui: &mut egui::Ui, label: &str, s: &hollow::HollowSave
                 ));
                 ui.label(egui::RichText::new("·").color(WEAK));
                 ui.label(format!(
-                    "🪙 {} geo",
+                    "{} geo",
                     s.geo.map(|n| n.to_string()).as_deref().unwrap_or("—")
                 ));
                 ui.label(egui::RichText::new("·").color(WEAK));
                 ui.label(format!(
-                    "🗡 Nail {}",
+                    "Nail {}",
                     s.nail.map(|n| n.to_string()).as_deref().unwrap_or("—")
                 ));
             });
@@ -350,7 +347,7 @@ pub(crate) fn ue_card(ui: &mut egui::Ui, agg: &UeAggregate) {
                 ui.label(egui::RichText::new(&agg.class).color(WEAK).size(12.0));
             }
             ui.label(format!(
-                "🗂 {} checkpoint file{}",
+                "▤ {} checkpoint file{}",
                 agg.files,
                 if agg.files == 1 { "" } else { "s" }
             ));
@@ -442,7 +439,7 @@ pub(crate) fn shady_card(ui: &mut egui::Ui, s: &shady::ShadySave) {
                 ui.label(egui::RichText::new("● In progress").color(GOOD).strong());
             });
             if !s.checkpoint.is_empty() {
-                ui.label(format!("📍 Checkpoint: {}", s.checkpoint));
+                ui.label(format!("Checkpoint: {}", s.checkpoint));
             }
             if s.max_scene > s.scene {
                 ui.label(
@@ -458,7 +455,7 @@ pub(crate) fn shady_card(ui: &mut egui::Ui, s: &shady::ShadySave) {
                     .color(WEAK),
                 );
             }
-            ui.label(format!("🦢 Origami folded: {}", s.origami));
+            ui.label(format!("Origami folded: {}", s.origami));
         });
     ui.add_space(4.0);
 }

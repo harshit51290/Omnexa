@@ -1026,31 +1026,48 @@ impl eframe::App for App {
             .default_width(176.0)
             .show(ctx, |ui| {
                 ui.add_space(10.0);
-                for (label, icon, v) in [
-                    ("Games", "🎮", Nav::Games),
-                    ("Backups", "🗂", Nav::Backups),
-                    ("Settings", "⚙", Nav::Settings),
-                    ("About", "ⓘ", Nav::About),
+                for (label, v) in [
+                    ("Games", Nav::Games),
+                    ("Backups", Nav::Backups),
+                    ("Settings", Nav::Settings),
+                    ("About", Nav::About),
                 ] {
                     let on = self.view == v;
-                    let b = egui::Button::new(
-                        egui::RichText::new(format!("{icon}  {label}"))
-                            .size(13.0)
-                            .strong()
-                            .color(if on { CYAN } else { WEAK }),
-                    )
-                    .fill(if on { CARD_HOVER } else { PANEL })
-                    .stroke(egui::Stroke::new(
-                        1.0_f32,
-                        if on {
-                            ACCENT
-                        } else {
-                            egui::Color32::TRANSPARENT
-                        },
-                    ))
-                    .corner_radius(10.0)
-                    .min_size(egui::vec2(ui.available_width(), 36.0));
-                    if ui.add(b).clicked() {
+                    let resp = egui::Frame::new()
+                        .inner_margin(egui::Margin::symmetric(10, 0))
+                        .corner_radius(10.0)
+                        .stroke(egui::Stroke::new(
+                            1.0_f32,
+                            if on {
+                                ACCENT
+                            } else {
+                                egui::Color32::TRANSPARENT
+                            },
+                        ))
+                        .fill(if on { CARD_HOVER } else { PANEL })
+                        .show(ui, |ui| {
+                            ui.set_width(ui.available_width());
+                            ui.horizontal(|ui| {
+                                let (bar, _) = ui.allocate_exact_size(
+                                    egui::vec2(3.0, 20.0),
+                                    egui::Sense::hover(),
+                                );
+                                ui.painter().rect_filled(
+                                    bar,
+                                    2.0,
+                                    if on { CYAN } else { egui::Color32::TRANSPARENT },
+                                );
+                                ui.label(
+                                    egui::RichText::new(label).size(13.5).strong().color(if on {
+                                        TEXT
+                                    } else {
+                                        WEAK
+                                    }),
+                                );
+                            });
+                        })
+                        .response;
+                    if resp.interact(egui::Sense::click()).clicked() {
                         self.view = v;
                         if v == Nav::Settings {
                             self.root_edit = self.backup_root.to_string_lossy().to_string();
@@ -1279,7 +1296,7 @@ impl eframe::App for App {
 
         egui::TopBottomPanel::bottom("status").show(ctx, |ui| {
             ui.horizontal(|ui| {
-                ui.label(egui::RichText::new("💾").color(WEAK));
+                ui.label(egui::RichText::new("■").color(WEAK));
                 if let Some(last) = self.toasts.last() {
                     ui.label(
                         egui::RichText::new(&last.text)
@@ -1534,6 +1551,9 @@ impl App {
     }
 
     /// First-run welcome: the vault pitch, gaming style.
+    /// Onboarding hero: full-bleed banner, live vault stats, fit-guaranteed
+    /// steps, one stacked CTA pair. Steps never overflow: exact thirds on
+    /// wide windows, full-width stack on narrow ones.
     fn show_welcome(&mut self, ctx: &egui::Context, ui: &mut egui::Ui) {
         egui::ScrollArea::vertical().id_salt("welcome").show(ui, |ui| {
             ui.add_space(12.0);
@@ -1541,14 +1561,14 @@ impl App {
             ui.vertical_centered(|ui| {
                 brand_logo(ctx, &mut self.textures, ui, 60.0);
                 ui.label(
-                    egui::RichText::new("⬢ OMNEXA ⬢")
+                    egui::RichText::new("O M N E X A")
                         .size(14.0)
                         .strong()
                         .color(CYAN),
                 );
                 ui.heading(
                     egui::RichText::new("Your library, bulletproof.")
-                        .size(32.0)
+                        .size(30.0)
                         .strong()
                         .color(TEXT),
                 );
@@ -1556,7 +1576,7 @@ impl App {
                     egui::RichText::new(
                         "Every save, every character, every world — found automatically, backed up in one click, restored without fear. Everything stays on this PC.",
                     )
-                    .size(14.0)
+                    .size(13.5)
                     .color(WEAK),
                 );
                 ui.add_space(4.0);
@@ -1576,70 +1596,102 @@ impl App {
                 }
             });
             ui.add_space(14.0);
-            // Three equal steps: exact thirds so they never wrap mid-row.
-            let step_w = ((ui.available_width() - 16.0) / 3.0).clamp(170.0, 300.0);
-            ui.horizontal_top(|ui| {
-                for (n, t, d) in [
-                    ("01", "PICK A GAME", "Your real library floats to the top, cover art included."),
-                    ("02", "BACK IT UP", "One click. Every file fingerprinted and verified."),
-                    ("03", "AUTO-PROTECT", "Quit the game — a copy lands in your vault by itself."),
-                ] {
+            let steps = [
+                ("01", "PICK A GAME", "Your real library floats to the top, cover art included."),
+                ("02", "BACK IT UP", "One click. Every file fingerprinted and verified."),
+                ("03", "AUTO-PROTECT", "Quit the game — a copy lands in your vault by itself."),
+            ];
+            if ui.available_width() >= 620.0 {
+                ui.columns(3, |uis| {
+                    for (col, (n, t, d)) in uis.iter_mut().zip(steps.iter()) {
+                        egui::Frame::group(col.style())
+                            .inner_margin(egui::Margin::symmetric(16, 12))
+                            .corner_radius(14.0)
+                            .stroke(egui::Stroke::new(1.0_f32, BORDER))
+                            .fill(CARD)
+                            .show(col, |ui| {
+                                ui.vertical(|ui| {
+                                    ui.label(
+                                        egui::RichText::new(*n).strong().size(22.0).color(CYAN),
+                                    );
+                                    ui.label(
+                                        egui::RichText::new(*t).strong().size(13.5).color(TEXT),
+                                    );
+                                    ui.label(egui::RichText::new(*d).size(12.5).color(WEAK));
+                                });
+                            });
+                    }
+                });
+            } else {
+                for (n, t, d) in steps {
                     egui::Frame::group(ui.style())
                         .inner_margin(egui::Margin::symmetric(16, 12))
                         .corner_radius(14.0)
                         .stroke(egui::Stroke::new(1.0_f32, BORDER))
                         .fill(CARD)
                         .show(ui, |ui| {
-                            ui.set_width(step_w);
-                            ui.label(
-                                egui::RichText::new(n).strong().size(22.0).color(CYAN),
-                            );
-                            ui.label(
-                                egui::RichText::new(t).strong().size(13.5).color(TEXT),
-                            );
-                            ui.label(egui::RichText::new(d).size(12.5).color(WEAK));
+                            ui.set_width(ui.available_width());
+                            ui.horizontal(|ui| {
+                                ui.label(
+                                    egui::RichText::new(n).strong().size(20.0).color(CYAN),
+                                );
+                                ui.vertical(|ui| {
+                                    ui.label(
+                                        egui::RichText::new(t).strong().size(13.5).color(TEXT),
+                                    );
+                                    ui.label(egui::RichText::new(d).size(12.5).color(WEAK));
+                                });
+                            });
                         });
-                    ui.add_space(8.0);
+                    ui.add_space(6.0);
                 }
-            });
+            }
             ui.add_space(14.0);
             ui.vertical_centered(|ui| {
-                ui.horizontal(|ui| {
-                    let big = egui::Button::new(
-                        egui::RichText::new(if self.scanning {
-                            "Working…"
-                        } else {
-                            "⬢  PROTECT MY GAMES"
-                        })
-                        .strong()
-                        .size(14.5)
-                        .color(TEXT),
-                    )
-                    .fill(ACCENT)
-                    .corner_radius(12.0)
-                    .min_size(egui::vec2(220.0, 46.0));
-                    if ui.add_enabled(!self.scanning, big).clicked() {
-                        if let Some(i) = self.games.iter().position(|g| !g.saves.is_empty()) {
-                            self.sel = Some(i);
-                            self.refresh_backups();
-                        }
+                let big = egui::Button::new(
+                    egui::RichText::new(if self.scanning {
+                        "Working…"
+                    } else {
+                        "PROTECT MY GAMES"
+                    })
+                    .strong()
+                    .size(14.5)
+                    .color(TEXT),
+                )
+                .fill(ACCENT)
+                .corner_radius(12.0);
+                if ui
+                    .add_sized(egui::vec2(240.0, 46.0), big)
+                    .clicked()
+                    && !self.scanning
+                {
+                    if let Some(i) = self.games.iter().position(|g| !g.saves.is_empty()) {
+                        self.sel = Some(i);
+                        self.refresh_backups();
                     }
-                    if ui.button("⚙ Open Settings").clicked() {
-                        self.view = Nav::Settings;
-                        self.root_edit = self.backup_root.to_string_lossy().to_string();
-                    }
-                });
+                }
+                ui.add_space(6.0);
+                if ui
+                    .add_sized(egui::vec2(240.0, 38.0), egui::Button::new("Open Settings"))
+                    .clicked()
+                {
+                    self.view = Nav::Settings;
+                    self.root_edit = self.backup_root.to_string_lossy().to_string();
+                }
+                if self.scanning {
+                    ui.add_space(8.0);
+                    ui.horizontal(|ui| {
+                        ui.spinner();
+                        ui.label(
+                            egui::RichText::new("Looking for your games…").weak().size(13.0),
+                        );
+                    });
+                }
             });
-            if self.scanning {
-                ui.add_space(8.0);
-                ui.horizontal(|ui| {
-                    ui.spinner();
-                    ui.label(egui::RichText::new("Looking for your games…").weak().size(13.0));
-                });
-            }
         });
     }
 }
+
 impl App {
     fn show_game(&mut self, ctx: &egui::Context, ui: &mut egui::Ui, i: usize) {
         let g = self.games[i].clone();
@@ -1670,10 +1722,7 @@ impl App {
                             .stroke(egui::Stroke::new(1.0_f32, BORDER))
                             .show(ui, |ui| {
                                 ui.set_width(ui.available_width());
-                                ui.add_sized(
-                                    egui::vec2(ui.available_width(), 190.0),
-                                    egui::Image::new(&tex).corner_radius(12.0),
-                                );
+                                cover_art(ui, &tex, 190.0);
                             });
                         ui.add_space(8.0);
                     }
@@ -1710,13 +1759,13 @@ impl App {
                     if let Some(t) = g.last_played {
                         detail_chip(
                             ui,
-                            "🕒",
+                            "»",
                             "LAST PLAYED",
                             &games::fmt_relative(games::now_secs(), t),
                         );
                     }
-                    detail_chip(ui, "🗂", "SAVE FILES", &format!("{}", g.saves.len()));
-                    detail_chip(ui, "💾", "SAVE SIZE", &fmt_bytes(g.total_bytes));
+                    detail_chip(ui, "▤", "SAVE FILES", &format!("{}", g.saves.len()));
+                    detail_chip(ui, "■", "SAVE SIZE", &fmt_bytes(g.total_bytes));
                     detail_chip(
                         ui,
                         "🛡",
@@ -1824,7 +1873,7 @@ impl App {
                 ui.add_space(8.0);
                 section_title(
                     ui,
-                    "🕒",
+                    "»",
                     "BACKUP TIMELINE",
                     &format!("{} total", self.backups.len()),
                 );
@@ -1872,7 +1921,7 @@ impl App {
                             slots.iter().filter(|s| s.used).collect();
                         if !used.is_empty() {
                             ui.add_space(6.0);
-                            ui.label(egui::RichText::new("◆ YOUR JOURNEY").color(CYAN).size(12.5).strong());
+                            ui.label(egui::RichText::new("» YOUR JOURNEY").color(CYAN).size(12.5).strong());
                             for s in used {
                                 sekiro_card(ui, s);
                             }
@@ -1883,7 +1932,7 @@ impl App {
                             slots.iter().filter(|s| s.active).collect();
                         if !used.is_empty() {
                             ui.add_space(6.0);
-                            ui.label(egui::RichText::new("◆ YOUR CHARACTERS").color(CYAN).size(12.5).strong());
+                            ui.label(egui::RichText::new("» YOUR CHARACTERS").color(CYAN).size(12.5).strong());
                             for s in used {
                                 er_card(ui, s);
                             }
@@ -1891,31 +1940,31 @@ impl App {
                     }
                     SaveView::Hollow(saves) => {
                         ui.add_space(6.0);
-                        ui.label(egui::RichText::new("◆ YOUR KNIGHT").color(CYAN).size(12.5).strong());
+                        ui.label(egui::RichText::new("» YOUR KNIGHT").color(CYAN).size(12.5).strong());
                         for (label, s) in &saves {
                             hollow_card(ui, label, s);
                         }
                     }
                     SaveView::Ue(agg) => {
                         ui.add_space(6.0);
-                        ui.label(egui::RichText::new("◆ CHECKPOINTS").color(CYAN).size(12.5).strong());
+                        ui.label(egui::RichText::new("» CHECKPOINTS").color(CYAN).size(12.5).strong());
                         ue_card(ui, &agg);
                     }
                     SaveView::Mc(worlds) => {
                         ui.add_space(6.0);
-                        ui.label(egui::RichText::new("◆ YOUR WORLDS").color(CYAN).size(12.5).strong());
+                        ui.label(egui::RichText::new("» YOUR WORLDS").color(CYAN).size(12.5).strong());
                         for (label, w) in &worlds {
                             mc_card(ui, label, w);
                         }
                     }
                     SaveView::Shady(s) => {
                         ui.add_space(6.0);
-                        ui.label(egui::RichText::new("◆ YOUR STORY").color(CYAN).size(12.5).strong());
+                        ui.label(egui::RichText::new("» YOUR STORY").color(CYAN).size(12.5).strong());
                         shady_card(ui, &s);
                     }
                     SaveView::Json { file, fields, keys } => {
                         ui.add_space(6.0);
-                        ui.label(egui::RichText::new("◆ INSIDE THE SAVE").color(CYAN).size(12.5).strong());
+                        ui.label(egui::RichText::new("» INSIDE THE SAVE").color(CYAN).size(12.5).strong());
                         json_card(ui, &file, &fields, keys);
                     }
                     SaveView::Other => {
@@ -1995,7 +2044,7 @@ impl App {
                     self.root_edit = self.backup_root.to_string_lossy().to_string();
                     self.toast("Back to the default folder.", true);
                 }
-                if ui.button("📂 Reveal").on_hover_text("Open in Explorer").clicked() {
+                if ui.button("Open folder").on_hover_text("Open in Explorer").clicked() {
                     let _ = std::process::Command::new("explorer")
                         .arg(&self.backup_root)
                         .spawn();
@@ -2085,7 +2134,7 @@ impl App {
                     self.start_scan();
                 }
             }
-            if ui.button("＋ Add folder…").clicked() {
+            if ui.button("+ Add folder…").clicked() {
                 if let Some(p) = rfd::FileDialog::new().pick_folder() {
                     if !self.settings.custom_folders.contains(&p) {
                         self.settings.custom_folders.push(p);
